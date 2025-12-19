@@ -1,3 +1,4 @@
+
 // SPDX-License-Identifier: Apache-2.0
 // Licensed to the Ed-Fi Alliance under one or more agreements.
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
@@ -5,8 +6,9 @@
 
 using EdFi.Admin.DataAccess.Contexts;
 using EdFi.Admin.DataAccess.Models;
+using EdFi.Ods.AdminApi.Common.Infrastructure.ErrorHandling;
 
-namespace EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
+namespace EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
 
 public interface IEditOdsInstanceCommand
 {
@@ -24,14 +26,13 @@ public class EditOdsInstanceCommand : IEditOdsInstanceCommand
 
     public OdsInstance Execute(IEditOdsInstanceModel changedOdsInstanceData)
     {
-        var odsInstance = _context.OdsInstances.SingleOrDefault(v => v.OdsInstanceId == changedOdsInstanceData.OdsInstanceId) ??
-            throw new NotFoundException<int>("odsInstance", changedOdsInstanceData.OdsInstanceId);
+        var odsInstance = _context.OdsInstances.SingleOrDefault(v => v.OdsInstanceId == changedOdsInstanceData.Id) ??
+            throw new NotFoundException<int>("odsInstance", changedOdsInstanceData.Id);
 
         odsInstance.Name = changedOdsInstanceData.Name;
         odsInstance.InstanceType = changedOdsInstanceData.InstanceType;
-        odsInstance.IsExtended = changedOdsInstanceData.IsExtended ?? false;
-        odsInstance.Status = changedOdsInstanceData.Status;
-        odsInstance.Version = changedOdsInstanceData.Version;
+        if (!string.IsNullOrEmpty(changedOdsInstanceData.ConnectionString))
+            odsInstance.ConnectionString = changedOdsInstanceData.ConnectionString;
 
         _context.SaveChanges();
         return odsInstance;
@@ -40,11 +41,9 @@ public class EditOdsInstanceCommand : IEditOdsInstanceCommand
 
 public interface IEditOdsInstanceModel
 {
-    public int OdsInstanceId { get; set; }
+    public int Id { get; set; }
     string? Name { get; }
     string? InstanceType { get; }
-    string? Status { get; set; }
-    bool? IsExtended { get; }
-    string? Version { get; set; }
+    string? ConnectionString { get; }
 }
 

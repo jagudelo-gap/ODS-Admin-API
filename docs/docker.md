@@ -4,6 +4,8 @@ Must already have Docker Desktop or equivalent running on your workstation.
 
 ## Quick Start for Local Development and Testing
 
+PostgreSQL
+
 ```mermaid
 graph LR
     A(Admin Client) -->|HTTPS| B[nginx]
@@ -61,39 +63,53 @@ style I fill:#fff
    bash ./generate-certificate.sh
    ```
 
-2. Copy and customize the `.env.example` file. Importantly, be sure to change
-   the encryption key. In a Bash prompt, generate a random key thusly: `openssl
+2. Copy and customize the `.env.example` file. The project has a PostgreSQL
+   version (Docker/Compose/pgsql) and a MSSQL version (Docker/Compose/mssql)
+   to run the containers. Importantly, be sure to change the encryption key.
+   In a Bash prompt, generate a random key thusly: `openssl
    rand -base64 32`.
 
+   PostgreSQL
+
    ```shell
-   cd ../../Compose/pgsql
+   cd Docker/Compose/pgsql
    cp .env.example .env
    code .env
    ```
 
+   MSSQL
+
+   ```shell
+   cd Docker/Compose/mssql
+   cp .env.example .env
+   code .env
+   ```
+
+   > [!NOTE]
+   > The .env file is a shared resource that can be referenced by both the
+   > "MultiTenant" and "SingleTenant" compose files.
+
 3. Build local containers (optional step; next step will run the build implicitly)
 
    ```shell
-   docker compose -f compose-build-dev.yml build
+   docker compose -f SingleTenant/compose-build-dev.yml build
    ```
 
 4. Start containers
 
    ```shell
-   docker compose -f compose-build-dev.yml up -d
+   docker compose -f SingleTenant/compose-build-dev.yml up -d
    ```
 
 5. Inspect containers
 
    ```shell
    # List processes
-   docker compose -f compose-build-dev.yml ps
+   docker compose -f SingleTenant/compose-build-dev.yml ps
 
    # Check status of the AdminAPI
    curl -k https://localhost/adminapi
 
-   # Check status of ODS/API
-   curl -k https://localhost/webapi
    ```
 
 6. Create an administrative (full access) API client (substitute in appropriate
@@ -155,4 +171,20 @@ style D fill:#fff
 ```
 
 Instructions are similar to the localhost quickstart above, except use
-`compose-build-binaries.yml` instead of `compose-build-dev.yml`.
+`compose-build-binaries.yml`, `compose-build-idp-binaries.yml` or `compose-build-idp-dev.yml` instead of `compose-build-dev.yml`.
+
+## Multi-Tenant
+
+Instructions are similar to the Local Development and Pre-Built Binaries setups above.
+
+Tenants details can be configured on appsettings.dockertemplate.json file.
+
+For local development and testing, use `MultiTenant/compose-build-dev-multi-tenant.yml`.
+For local development and testing with keycloak, use `MultiTenant/compose-build-idp-dev-multi-tenant.yml`.
+For testing pre-built binaries, use `MultiTenant/compose-build-binaries-multi-tenant.yml`.
+For testing pre-built binaries with keycloak, use `MultiTenant/compose-build-idp-binaries-multi-tenant.yml`.
+
+## Admin Api and Ed-Fi ODS / API docker containers
+
+Please refer [DOCKER DEPLOYMENT](https://techdocs.ed-fi.org/display/EDFITOOLS/Docker+Deployment) for
+installing and configuring Admin Api along with Ed-Fi ODS / API on Docker containers for testing.

@@ -5,13 +5,16 @@
 
 using AutoMapper;
 using EdFi.Admin.DataAccess.Contexts;
-using EdFi.Ods.AdminApi.Infrastructure;
-using EdFi.Ods.AdminApi.Infrastructure.Documentation;
-using EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
-using FluentValidation;
-using Swashbuckle.AspNetCore.Annotations;
-using FluentValidation.Results;
+using EdFi.Ods.AdminApi.Common.Features;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
+using EdFi.Ods.AdminApi.Common.Settings;
 using EdFi.Ods.AdminApi.Infrastructure.Commands;
+using EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
+using EdFi.Ods.AdminApi.Infrastructure.Documentation;
+using FluentValidation;
+using FluentValidation.Results;
+using Microsoft.Extensions.Options;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace EdFi.Ods.AdminApi.Features.Applications;
 
@@ -20,34 +23,63 @@ public class AddApplication : IFeature
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
         AdminApiEndpointBuilder.MapPost(endpoints, "/applications", Handle)
-            .WithDefaultDescription()
+            .WithDefaultSummaryAndDescription()
             .WithRouteOptions(b => b.WithResponse<ApplicationResult>(201))
-            .BuildForVersions(AdminApiVersions.V1);
+            .BuildForVersions(string.Empty, true, AdminApiVersions.V2);
     }
 
-    public async Task<IResult> Handle(Validator validator, IAddApplicationCommand addApplicationCommand, IMapper mapper, IUsersContext db, Request request)
+    public static async Task<IResult> Handle(Validator validator, IAddApplicationCommand addApplicationCommand, IMapper mapper, IUsersContext db, AddApplicationRequest request, IOptions<AppSettings> options)
     {
         await validator.GuardAsync(request);
         GuardAgainstInvalidEntityReferences(request, db);
-        var addedApplicationResult = addApplicationCommand.Execute(request);
+        var addedApplicationResult = addApplicationCommand.Execute(request, options);
         var model = mapper.Map<ApplicationResult>(addedApplicationResult);
-        return AdminApiResponse<ApplicationResult>.Created(model, "Application", $"/applications/{model.ApplicationId}");
+        return Results.Created($"/applications/{model.Id}", model);
     }
 
-    private void GuardAgainstInvalidEntityReferences(Request request, IUsersContext db)
+    private static void GuardAgainstInvalidEntityReferences(AddApplicationRequest request, IUsersContext db)
     {
         if (null == db.Vendors.Find(request.VendorId))
             throw new ValidationException(new[] { new ValidationFailure(nameof(request.VendorId), $"Vendor with ID {request.VendorId} not found.") });
 
-        if (request.ProfileId.HasValue && db.Profiles.Find(request.ProfileId) == null)
-            throw new ValidationException(new[] { new ValidationFailure(nameof(request.ProfileId), $"Profile with ID {request.ProfileId} not found.") });
+        ValidateProfileIds(request, db);
+        ValidateOdsInstanceIds(request, db);
+    }
 
-        if (request.OdsInstanceId.HasValue && db.OdsInstances.Find(request.OdsInstanceId) == null)
-            throw new ValidationException(new[] { new ValidationFailure(nameof(request.OdsInstanceId), $"Ods instance with ID {request.OdsInstanceId} not found.") });
+    private static void ValidateProfileIds(AddApplicationRequest request, IUsersContext db)
+    {
+        var allProfileIds = db.Profiles.Select(p => p.ProfileId).ToList();
+
+        if ((request.ProfileIds != null && request.ProfileIds.Any()) && allProfileIds.Count == 0)
+        {
+            throw new ValidationException(new[] { new ValidationFailure(nameof(request.ProfileIds), $"The following ProfileIds were not found in database: {string.Join(", ", request.ProfileIds)}") });
+        }
+
+        if ((request.ProfileIds != null && request.ProfileIds.Any()) && (!request.ProfileIds.All(p => allProfileIds.Contains(p))))
+        {
+            var notExist = request.ProfileIds.Where(p => !allProfileIds.Contains(p));
+            throw new ValidationException(new[] { new ValidationFailure(nameof(request.ProfileIds), $"The following ProfileIds were not found in database: {string.Join(", ", notExist)}") });
+        }
+    }
+
+    private static void ValidateOdsInstanceIds(AddApplicationRequest request, IUsersContext db)
+    {
+        var allOdsInstanceIds = db.OdsInstances.Select(p => p.OdsInstanceId).ToList();
+
+        if ((request.OdsInstanceIds != null && request.OdsInstanceIds.Any()) && allOdsInstanceIds.Count == 0)
+        {
+            throw new ValidationException(new[] { new ValidationFailure(nameof(request.OdsInstanceIds), $"The following OdsInstanceIds were not found in database: {string.Join(", ", request.OdsInstanceIds)}") });
+        }
+
+        if ((request.OdsInstanceIds != null && request.OdsInstanceIds.Any()) && (!request.OdsInstanceIds.All(p => allOdsInstanceIds.Contains(p))))
+        {
+            var notExist = request.OdsInstanceIds.Where(p => !allOdsInstanceIds.Contains(p));
+            throw new ValidationException(new[] { new ValidationFailure(nameof(request.OdsInstanceIds), $"The following OdsInstanceIds were not found in database: {string.Join(", ", notExist)}") });
+        }
     }
 
     [SwaggerSchema(Title = "AddApplicationRequest")]
-    public class Request : IAddApplicationModel
+    public class AddApplicationRequest : IAddApplicationModel
     {
         [SwaggerSchema(Description = FeatureConstants.ApplicationNameDescription, Nullable = false)]
         public string? ApplicationName { get; set; }
@@ -60,17 +92,20 @@ public class AddApplication : IFeature
 
         [SwaggerOptional]
         [SwaggerSchema(Description = FeatureConstants.ProfileIdDescription)]
-        public int? ProfileId { get; set; }
-
-        [SwaggerOptional]
-        [SwaggerSchema(Description = FeatureConstants.OdsInstanceIdDescription)]
-        public int? OdsInstanceId { get; set; }
+        public IEnumerable<int>? ProfileIds { get; set; }
 
         [SwaggerSchema(Description = FeatureConstants.EducationOrganizationIdsDescription, Nullable = false)]
-        public IEnumerable<int>? EducationOrganizationIds { get; set; }
+        public IEnumerable<long>? EducationOrganizationIds { get; set; }
+
+        [SwaggerSchema(Description = FeatureConstants.OdsInstanceIdsDescription, Nullable = false)]
+        public IEnumerable<int>? OdsInstanceIds { get; set; }
+
+        [SwaggerOptional]
+        [SwaggerSchema(Description = FeatureConstants.Enable)]
+        public bool? Enabled { get; set; }
     }
 
-    public class Validator : AbstractValidator<Request>
+    public class Validator : AbstractValidator<AddApplicationRequest>
     {
         public Validator()
         {
@@ -90,10 +125,14 @@ public class AddApplication : IFeature
                 .NotEmpty()
                 .WithMessage(FeatureConstants.EdOrgIdsValidationMessage);
 
+            RuleFor(m => m.OdsInstanceIds)
+                .NotEmpty()
+                .WithMessage(FeatureConstants.OdsInstanceIdsValidationMessage);
+
             RuleFor(m => m.VendorId).Must(id => id > 0).WithMessage(FeatureConstants.VendorIdValidationMessage);
         }
 
-        private bool BeWithinApplicationNameMaxLength<T>(IAddApplicationModel model, string? applicationName, ValidationContext<T> context)
+        private static bool BeWithinApplicationNameMaxLength<T>(IAddApplicationModel model, string? applicationName, ValidationContext<T> context)
         {
             var extraCharactersInName = applicationName!.Length - ValidationConstants.MaximumApplicationNameLength;
             if (extraCharactersInName <= 0)

@@ -9,7 +9,6 @@ using EdFi.Admin.DataAccess.Contexts;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using Respawn;
-using Respawn.Graph;
 using static EdFi.Ods.AdminApi.DBTests.Testing;
 
 namespace EdFi.Ods.AdminApi.DBTests;
@@ -17,33 +16,27 @@ namespace EdFi.Ods.AdminApi.DBTests;
 [TestFixture]
 public abstract class PlatformUsersContextTestBase
 {
-    private Respawner _checkpoint;
-
-    protected virtual async void CreateCheckpoint()
+    private readonly Checkpoint _checkpoint = new()
     {
-        _checkpoint = await Respawner.CreateAsync(ConnectionString, new RespawnerOptions
-        {
-            TablesToIgnore = new Table[]
-        {
+        TablesToIgnore =
+        [
             "__MigrationHistory", "DeployJournal", "AdminApiDeployJournal"
-        },
-            SchemasToExclude = Array.Empty<string>()
-        });
-    }
+        ],
+        SchemasToExclude = []
+    };
 
     protected static string ConnectionString => AdminConnectionString;
 
     [OneTimeTearDown]
     public async Task FixtureTearDown()
     {
-        await _checkpoint.ResetAsync(ConnectionString);
+        await _checkpoint.Reset(ConnectionString);
     }
 
     [SetUp]
     public async Task SetUp()
     {
-        CreateCheckpoint();
-        await _checkpoint.ResetAsync(ConnectionString);
+        await _checkpoint.Reset(ConnectionString);
     }
 
     protected static void Save(params object[] entities)
@@ -51,7 +44,9 @@ public abstract class PlatformUsersContextTestBase
         Transaction(usersContext =>
         {
             foreach (var entity in entities)
+            {
                 ((SqlServerUsersContext)usersContext).Add(entity);
+            }
         });
     }
 

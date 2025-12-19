@@ -62,5 +62,13 @@ credentials-*.xml
 libs/
 libs.codegen/
 
-Docker/Application
-dhparam.pem
+#Docker
+Docker/Application/
+Docker/Settings/ssl/server.crt
+Docker/Settings/ssl/server.key
+Docker/Settings/ssl/dhparam.pem
+
+# Code coverage
+coverage
+coverage.*
+coveragereport/

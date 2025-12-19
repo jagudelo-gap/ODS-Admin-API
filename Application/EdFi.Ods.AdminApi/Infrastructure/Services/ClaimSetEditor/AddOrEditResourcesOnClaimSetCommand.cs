@@ -3,11 +3,7 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
-using EdFi.Ods.AdminApi.Infrastructure.ClaimSetEditor.Extensions;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
-using EdFi.Ods.AdminApi.Infrastructure.Services.ClaimSetEditor;
-using EdFi.Ods.AdminApi.Infrastructure.Services.ClaimSetEditor.Extensions;
-using FluentValidation;
 
 namespace EdFi.Ods.AdminApi.Infrastructure.ClaimSetEditor;
 
@@ -37,15 +33,11 @@ public class AddOrEditResourcesOnClaimSetCommand
         resources.AddRange(childResources);
         var currentResources = resources.Select(r =>
             {
-                var resource = allResources.FirstOrDefault(dr => (dr.Name ?? string.Empty).Equals(r.Name, StringComparison.Ordinal));
+                var resource = allResources.Find(dr => (dr.Name ?? string.Empty).Equals(r.Name, StringComparison.Ordinal));
                 if (resource != null)
                 {
-                    resource.Create = r.Create;
-                    resource.Read = r.Read;
-                    resource.Update = r.Update;
-                    resource.Delete = r.Delete;
-                    resource.ReadChanges = r.ReadChanges;
-                    resource.AuthStrategyOverridesForCRUD = r.AuthStrategyOverridesForCRUD;
+                    resource.Actions = r.Actions;
+                    resource.AuthorizationStrategyOverridesForCRUD = r.AuthorizationStrategyOverridesForCRUD;
                 }
                 return resource;
             }).ToList();
@@ -62,29 +54,16 @@ public class AddOrEditResourcesOnClaimSetCommand
 
             _editResourceOnClaimSetCommand.Execute(editResourceModel);
 
-            if (resource!.AuthStrategyOverridesForCRUD != null && resource.AuthStrategyOverridesForCRUD.Any())
+            if (resource!.AuthorizationStrategyOverridesForCRUD != null && resource.AuthorizationStrategyOverridesForCRUD.Any())
             {
                 var overrideAuthStrategyModel = new OverrideAuthorizationStrategyModel
                 {
                     ClaimSetId = claimSetId,
                     ResourceClaimId = resource.Id,
-                    AuthorizationStrategyForCreate = AuthStrategyOverrideForAction(resource.AuthStrategyOverridesForCRUD.Create()),
-                    AuthorizationStrategyForRead = AuthStrategyOverrideForAction(resource.AuthStrategyOverridesForCRUD.Read()),
-                    AuthorizationStrategyForUpdate = AuthStrategyOverrideForAction(resource.AuthStrategyOverridesForCRUD.Update()),
-                    AuthorizationStrategyForDelete = AuthStrategyOverrideForAction(resource.AuthStrategyOverridesForCRUD.Delete()),
-                    AuthorizationStrategyForReadChanges = AuthStrategyOverrideForAction(resource.AuthStrategyOverridesForCRUD.ReadChanges())
+                    ClaimSetResourceClaimActionAuthStrategyOverrides = resource.AuthorizationStrategyOverridesForCRUD
                 };
                 _overrideDefaultAuthorizationStrategyCommand.Execute(overrideAuthStrategyModel);
             }
-        }
-
-        static int[] AuthStrategyOverrideForAction(ClaimSetResourceClaimActionAuthStrategies? claimSetResourceClaimActionAuthStrategies)
-        {
-            if (claimSetResourceClaimActionAuthStrategies != null && claimSetResourceClaimActionAuthStrategies.AuthorizationStrategies != null)
-            {
-                return claimSetResourceClaimActionAuthStrategies.AuthorizationStrategies.Where(p => p is not null).Select(p => p!.AuthStrategyId).ToArray();
-            }
-            return Array.Empty<int>();
         }
     }
 
@@ -92,13 +71,26 @@ public class AddOrEditResourcesOnClaimSetCommand
     {
         var allResources = new List<ResourceClaim>();
         var parentResources = _getResourceClaimsQuery.Execute().ToList();
-        allResources.AddRange(parentResources);
-        foreach (var children in parentResources.Select(x => x.Children))
+
+        foreach (var resource in parentResources)
         {
-            allResources.AddRange(children);
+            AddResourceWithChildren(resource, allResources);
         }
 
         return allResources;
+    }
+
+    private void AddResourceWithChildren(ResourceClaim resource, List<ResourceClaim> allResources)
+    {
+        allResources.Add(resource);
+
+        if (resource.Children != null && resource.Children.Any())
+        {
+            foreach (var child in resource.Children)
+            {
+                AddResourceWithChildren(child, allResources);
+            }
+        }
     }
 }
 
@@ -117,10 +109,5 @@ public class OverrideAuthorizationStrategyModel : IOverrideDefaultAuthorizationS
 {
     public int ClaimSetId { get; set; }
     public int ResourceClaimId { get; set; }
-    public int[]? AuthorizationStrategyForCreate { get; set; }
-    public int[]? AuthorizationStrategyForRead { get; set; }
-    public int[]? AuthorizationStrategyForUpdate { get; set; }
-    public int[]? AuthorizationStrategyForDelete { get; set; }
-    public int[]? AuthorizationStrategyForReadChanges { get; set; }
-
+    public List<ClaimSetResourceClaimActionAuthStrategies?>? ClaimSetResourceClaimActionAuthStrategyOverrides { get; set; }
 }

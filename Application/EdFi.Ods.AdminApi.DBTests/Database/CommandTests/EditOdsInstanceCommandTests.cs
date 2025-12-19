@@ -3,17 +3,17 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Admin.DataAccess.Models;
+using EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
 using Moq;
 using NUnit.Framework;
 using Shouldly;
 using System.Linq;
-using EdFi.Admin.DataAccess.Models;
-using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
 
 namespace EdFi.Ods.AdminApi.DBTests.Database.CommandTests;
 
 [TestFixture]
-internal class EditOdsInstanceCommandTests : PlatformUsersContextTestBase
+public class EditOdsInstanceCommandTests : PlatformUsersContextTestBase
 {
     private int _odsInstanceId;
 
@@ -22,27 +22,27 @@ internal class EditOdsInstanceCommandTests : PlatformUsersContextTestBase
     {
         var originalOdsInstance = new OdsInstance
         {
-            Name = "old ods instance name",
-            InstanceType = "old type",
-            Status = "old status",
-            IsExtended = false,
-            Version = "old version",
+            Name = "old odsinstance name",
+            InstanceType = "old odsinstance instance type",
+            ConnectionString = "old odsinstance connection string",
         };
+
 
         Save(originalOdsInstance);
         _odsInstanceId = originalOdsInstance.OdsInstanceId;
     }
 
     [Test]
-    public void ShouldEditVendor()
+    public void ShouldEditOdsInstance()
     {
+        var name = "new odsinstance name";
+        var instanceType = "new odsinstance instance type";
+        var connectionString = "new odsinstance connection string";
         var newOdsInstanceData = new Mock<IEditOdsInstanceModel>();
-        newOdsInstanceData.Setup(v => v.OdsInstanceId).Returns(_odsInstanceId);
-        newOdsInstanceData.Setup(v => v.Name).Returns("new ods instance name");
-        newOdsInstanceData.Setup(v => v.InstanceType).Returns("new type");
-        newOdsInstanceData.Setup(v => v.Status).Returns("new status");
-        newOdsInstanceData.Setup(v => v.IsExtended).Returns(true);
-        newOdsInstanceData.Setup(v => v.Version).Returns("new version");
+        newOdsInstanceData.Setup(v => v.Id).Returns(_odsInstanceId);
+        newOdsInstanceData.Setup(v => v.Name).Returns(name);
+        newOdsInstanceData.Setup(v => v.InstanceType).Returns(instanceType);
+        newOdsInstanceData.Setup(v => v.ConnectionString).Returns(connectionString);
 
         Transaction(usersContext =>
         {
@@ -52,13 +52,35 @@ internal class EditOdsInstanceCommandTests : PlatformUsersContextTestBase
 
         Transaction(usersContext =>
         {
-            var changedOdsInstance = usersContext.OdsInstances
-            .Single(v => v.OdsInstanceId == _odsInstanceId);
-            changedOdsInstance.Name.ShouldBe("new ods instance name");
-            changedOdsInstance.InstanceType.ShouldBe("new type");
-            changedOdsInstance.Status.ShouldBe("new status");
-            changedOdsInstance.IsExtended.ShouldBe(true);
-            changedOdsInstance.Version.ShouldBe("new version");
+            var changedOdsInstance = usersContext.OdsInstances.Single(v => v.OdsInstanceId == _odsInstanceId);
+            changedOdsInstance.Name.ShouldBe(name);
+            changedOdsInstance.InstanceType.ShouldBe(instanceType);
+            changedOdsInstance.ConnectionString.ShouldBe(connectionString);
+        });
+    }
+
+    [Test]
+    public void ShouldEditOdsInstanceWithEmptyInstanceType()
+    {
+        var name = "new odsinstance name";
+        var connectionString = "new odsinstance connection string";
+        var newOdsInstanceData = new Mock<IEditOdsInstanceModel>();
+        newOdsInstanceData.Setup(v => v.Id).Returns(_odsInstanceId);
+        newOdsInstanceData.Setup(v => v.Name).Returns(name);
+        newOdsInstanceData.Setup(v => v.ConnectionString).Returns(connectionString);
+
+        Transaction(usersContext =>
+        {
+            var editOdsInstanceCommand = new EditOdsInstanceCommand(usersContext);
+            editOdsInstanceCommand.Execute(newOdsInstanceData.Object);
+        });
+
+        Transaction(usersContext =>
+        {
+            var changedOdsInstance = usersContext.OdsInstances.Single(v => v.OdsInstanceId == _odsInstanceId);
+            changedOdsInstance.Name.ShouldBe(name);
+            changedOdsInstance.InstanceType.ShouldBeNullOrEmpty();
+            changedOdsInstance.ConnectionString.ShouldBe(connectionString);
         });
     }
 }

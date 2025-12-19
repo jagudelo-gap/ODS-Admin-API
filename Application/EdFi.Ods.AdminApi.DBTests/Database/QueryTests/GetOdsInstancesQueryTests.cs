@@ -3,12 +3,12 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Admin.DataAccess.Models;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
+using EdFi.Ods.AdminApi.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
 using NUnit.Framework;
 using Shouldly;
-using System.Linq;
-using EdFi.Admin.DataAccess.Models;
-using EdFi.Ods.AdminApi.Infrastructure;
 
 namespace EdFi.Ods.AdminApi.DBTests.Database.QueryTests;
 
@@ -16,79 +16,186 @@ namespace EdFi.Ods.AdminApi.DBTests.Database.QueryTests;
 public class GetOdsInstancesQueryTests : PlatformUsersContextTestBase
 {
     [Test]
-    public void Should_retrieve_ods_instances()
+    public void ShouldGetAllInstances()
     {
-        var newOdsInstance = new OdsInstance
-        {
-            Name = "test ods instance",
-            InstanceType = "test ods instance type",
-            Status = "OK",
-            Version = "1.0.0",
-        };
-
-        Save(newOdsInstance);
-
         Transaction(usersContext =>
         {
+            CreateMultiple(2);
             var command = new GetOdsInstancesQuery(usersContext, Testing.GetAppSettings());
-            var allOdsInstances = command.Execute();
-
-            allOdsInstances.ShouldNotBeEmpty();
-
-            var odsInstance = allOdsInstances.Single(v => v.OdsInstanceId == newOdsInstance.OdsInstanceId);
-            odsInstance.Name.ShouldBe("test ods instance");
-            odsInstance.InstanceType.ShouldBe("test ods instance type");
+            var results = command.Execute();
+            results.Count.ShouldBe(2);
         });
     }
 
     [Test]
-    public void Should_retrieve_ods_instances_with_offset_and_limit()
+    public void ShouldGetAllInstancesWithOffsetAndLimit()
     {
-        var odsInstances = new OdsInstance[5];
-
-        for (var odsInstanceIndex = 0; odsInstanceIndex < 5; odsInstanceIndex++)
-        {
-            odsInstances[odsInstanceIndex] = new OdsInstance
-            {
-                Name = $"test ods instance {odsInstanceIndex + 1}",
-                InstanceType = "test ods instance type",
-                Status = "OK",
-                Version = "1.0.0",
-            };
-        }
-
-        Save(odsInstances);
-
         Transaction(usersContext =>
         {
+            CreateMultiple();
+            var offset = 0;
+            var limit = 2;
+
             var command = new GetOdsInstancesQuery(usersContext, Testing.GetAppSettings());
-            var commonQueryParams = new CommonQueryParams(0, 2);
-
-            var odsInstancesAfterOffset = command.Execute(commonQueryParams);
+            var odsInstancesAfterOffset = command.Execute(new CommonQueryParams(offset, limit), null, null, null);
 
             odsInstancesAfterOffset.ShouldNotBeEmpty();
             odsInstancesAfterOffset.Count.ShouldBe(2);
 
-            odsInstancesAfterOffset.ShouldContain(v => v.Name == "test ods instance 1");
-            odsInstancesAfterOffset.ShouldContain(v => v.Name == "test ods instance 2");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 1");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 2");
 
-            commonQueryParams.Offset = 2;
+            offset = 2;
 
-            odsInstancesAfterOffset = command.Execute(commonQueryParams);
+            odsInstancesAfterOffset = command.Execute(new CommonQueryParams(offset, limit), null, null, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(2);
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 3");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 4");
+
+            offset = 4;
+
+            odsInstancesAfterOffset = command.Execute(new CommonQueryParams(offset, limit), null, null, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(1);
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 5");
+        });
+    }
+
+    [Test]
+    public void ShouldGetAllInstancesWithoutOffsetAndLimit()
+    {
+        Transaction(usersContext =>
+        {
+            CreateMultiple();
+
+            var command = new GetOdsInstancesQuery(usersContext, Testing.GetAppSettings());
+            var odsInstancesAfterOffset = command.Execute(new CommonQueryParams(), null, null, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(5);
+
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 1");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 2");
+
+            odsInstancesAfterOffset = command.Execute(new CommonQueryParams(), null, null, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(5);
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 3");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 4");
+
+            odsInstancesAfterOffset = command.Execute(new CommonQueryParams(), null, null, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(5);
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 5");
+        });
+    }
+    [Test]
+    public void ShouldGetAllInstancesWithoutLimit()
+    {
+        Transaction(usersContext =>
+        {
+            CreateMultiple();
+            var offset = 0;
+
+            var command = new GetOdsInstancesQuery(usersContext, Testing.GetAppSettings());
+            var odsInstancesAfterOffset = command.Execute(new CommonQueryParams(offset, null), null, null, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(5);
+
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 1");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 2");
+
+            offset = 2;
+
+            odsInstancesAfterOffset = command.Execute(new CommonQueryParams(offset, null), null, null, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(3);
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 3");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 4");
+
+            offset = 4;
+
+            odsInstancesAfterOffset = command.Execute(new CommonQueryParams(offset, null), null, null, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(1);
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 5");
+        });
+    }
+
+    [Test]
+    public void ShouldGetAllInstancesWithoutOffset()
+    {
+        Transaction(usersContext =>
+        {
+            CreateMultiple();
+            var limit = 2;
+
+            var command = new GetOdsInstancesQuery(usersContext, Testing.GetAppSettings());
+            var odsInstancesAfterOffset = command.Execute(new CommonQueryParams(null, limit), null, null, null);
 
             odsInstancesAfterOffset.ShouldNotBeEmpty();
             odsInstancesAfterOffset.Count.ShouldBe(2);
 
-            odsInstancesAfterOffset.ShouldContain(v => v.Name == "test ods instance 3");
-            odsInstancesAfterOffset.ShouldContain(v => v.Name == "test ods instance 4");
-            commonQueryParams.Offset = 4;
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 1");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == "test ods instance 2");
+        });
+    }
 
-            odsInstancesAfterOffset = command.Execute(commonQueryParams);
+    [Test]
+    public void ShouldGetAllInstancesWithId()
+    {
+        Transaction(usersContext =>
+        {
+            var odsInstances = CreateMultiple();
+            var command = new GetOdsInstancesQuery(usersContext, Testing.GetAppSettings());
+            var odsInstancesAfterOffset = command.Execute(new CommonQueryParams(), odsInstances[2].OdsInstanceId, null, null);
 
             odsInstancesAfterOffset.ShouldNotBeEmpty();
             odsInstancesAfterOffset.Count.ShouldBe(1);
 
-            odsInstancesAfterOffset.ShouldContain(v => v.Name == "test ods instance 5");
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == odsInstances[2].Name);
         });
+    }
+
+    [Test]
+    public void ShouldGetAllInstancesWithName()
+    {
+        Transaction(usersContext =>
+        {
+            var odsInstances = CreateMultiple();
+            var command = new GetOdsInstancesQuery(usersContext, Testing.GetAppSettings());
+            var odsInstancesAfterOffset = command.Execute(new CommonQueryParams(), null, odsInstances[2].Name, null);
+
+            odsInstancesAfterOffset.ShouldNotBeEmpty();
+            odsInstancesAfterOffset.Count.ShouldBe(1);
+
+            odsInstancesAfterOffset.ShouldContain(odsI => odsI.Name == odsInstances[2].Name);
+        });
+    }
+
+    private static OdsInstance[] CreateMultiple(int total = 5)
+    {
+        var odsInstances = new OdsInstance[total];
+
+        for (var odsIndex = 0; odsIndex < total; odsIndex++)
+        {
+            odsInstances[odsIndex] = new OdsInstance
+            {
+                InstanceType = "test type",
+                Name = $"test ods instance {odsIndex + 1}",
+                ConnectionString = "Data Source=(local);Initial Catalog=EdFi_Ods;Integrated Security=True;Encrypt=False"
+            };
+        }
+        Save(odsInstances);
+
+        return odsInstances;
     }
 }

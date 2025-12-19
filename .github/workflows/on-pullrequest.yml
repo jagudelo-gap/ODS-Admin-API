@@ -11,6 +11,11 @@ on:
       - main
       - "*-hotfix"
     paths:
+      # TODO: restore this with AA-1601, except run in a PS-specific
+      # workflow, so that the C# build and CodeQL do not run
+      # unnecessarily.
+      # - "**/*.ps1"
+      # - "**/*.psm1"
       - "**/*.cs"
       - "**/*.csproj"
       - ".github/**/*.yml"
@@ -19,6 +24,10 @@ on:
 permissions: read-all
 
 jobs:
+  # TODO: restore this with AA-1601
+  # run-ps-lint:
+  #   name: PowerShell Linter
+  #   uses: Ed-Fi-Alliance-OSS/Ed-Fi-Actions/.github/workflows/powershell-analyzer.yml@main
   scan-actions-bidi:
     name: Scan Actions, scan all files for BIDI Trojan Attacks
     uses: ed-fi-alliance-oss/ed-fi-actions/.github/workflows/repository-scanner.yml@main
@@ -38,12 +47,25 @@ jobs:
       - name: Build
         run: ./build.ps1 -Command Build -Configuration Debug
 
+      - name: Install Coverlet Tools
+        if: success()
+        run: |
+          dotnet tool install --global coverlet.console
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+
       - name: Run Unit Tests
         if: success()
-        run: ./build.ps1 -Command UnitTest -Configuration Debug
+        run: ./build.ps1 -Command UnitTest -Configuration Debug -RunCoverageAnalysis
+
+      - name: Upload Coverage Report
+        if: always()
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5
+        with:
+          name: Coverage Report
+          path: coveragereport
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5
         with:
           name: csharp-tests
           path: "**/*.trx"
@@ -69,12 +91,50 @@ jobs:
         if: success()
         uses: github/codeql-action/analyze@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # codeql-bundle-v3.28.0
 
+  run-integration-tests:
+    name: Run integration tests
+    env:
+      DB_Password: P@55w0rd
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: pwsh
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server@sha256:d7f2c670f0cd807b4dc466b8887bd2b39a4561f624c154896f5564ea38efd13a
+        env:
+          ACCEPT_EULA: "Y"
+          SA_PASSWORD: ${{ env.DB_Password }}
+          MSSQL_ENABLE_HADR: "1"
+        ports:
+          - 1433:1433
+    steps:
+      - name: Checkout the Repo
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Nuget.exe
+        uses: nuget/setup-nuget@323ab0502cd38fdc493335025a96c8fdb0edc71f #v2.0.1
+
+      - name: Build
+        run: ./build.ps1 -Command Build -Configuration Debug
+
+      - name: Run Integration Tests
+        if: success()
+        run: ./build.ps1 -Command IntegrationTest -Configuration Debug -UseIntegratedSecurity:$false -DbUsername "sa" -DbPassword ${{ env.DB_Password }}
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5
+        with:
+          name: csharp-integration-tests
+          path: "**/*.trx"
+          retention-days: 5
+
   event_file:
     name: "Event File"
     runs-on: ubuntu-latest
     steps:
     - name: Upload
-      uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
+      uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5
       with:
         name: Event File
         path: ${{ github.event_path }}

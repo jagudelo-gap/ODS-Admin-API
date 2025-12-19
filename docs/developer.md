@@ -2,59 +2,59 @@
 
 ## Contents
 
-- [Admin API Developer Instructions](#admin-api-developer-instructions)
-  - [Contents](#contents)
-  - [Development Pre-Requisites](#development-pre-requisites)
-  - [Build Script](#build-script)
-  - [Running on Localhost](#running-on-localhost)
-    - [Configuring Admin API to Run with the ODS/API](#configuring-admin-api-to-run-with-the-odsapi)
-    - [Resetting the Database State](#resetting-the-database-state)
-    - [Running Locally in Docker](#running-locally-in-docker)
-  - [Testing Admin API](#testing-admin-api)
-  - [Application Architecture](#application-architecture)
-    - [Database Layer](#database-layer)
-    - [Validation](#validation)
-- [Bulk Application Creation](#bulk-application-creation)
+* [Admin API Developer Instructions](#admin-api-developer-instructions)
+  * [Contents](#contents)
+  * [Development Pre-Requisites](#development-pre-requisites)
+  * [Build Script](#build-script)
+  * [Running on Localhost](#running-on-localhost)
+    * [Configuring Admin API to Run with the ODS/API](#configuring-admin-api-to-run-with-the-odsapi)
+    * [Resetting the Database State](#resetting-the-database-state)
+    * [Running Locally in Docker](#running-locally-in-docker)
+    * [Using Keycloak (IDP)](#using-keycloak-idp)
+    * [Running Unit Tests, Integration Tests, and Generating Code Coverage Reports](#running-unit-tests-integration-tests-and-generating-code-coverage-reports)
+  * [Application Architecture](#application-architecture)
+    * [Database Layer](#database-layer)
+    * [Validation](#validation)
 
 ## Development Pre-Requisites
 
-- [.NET 6.0 SDK](https://dotnet.microsoft.com/download/dotnet/6.0)
-- Suggested to have either:
-  - [Visual Studio 2022](https://visualstudio.microsoft.com/downloads), or
-  - [Visual Studio 2022 Build
+* [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+* Suggested to have either:
+  * [Visual Studio 2022](https://visualstudio.microsoft.com/downloads), or
+  * [Visual Studio 2022 Build
     Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
     (install the ".NET Build Tools" component)
-- Clone [this
+* Clone [this
   repository](https://github.com/Ed-Fi-Alliance-OSS/Ed-Fi-ODS-AdminApi) locally
-- To work with the official Ed-Fi Docker solution, also clone the [Docker
+* To work with the official Ed-Fi Docker solution, also clone the [Docker
   repository](https://github.com/Ed-Fi-Alliance-OSS/Ed-Fi-ODS-Docker).
 
 ## Build Script
 
 The PowerShell script `build.ps1` in the root directory contains functions for
 running standard build operations at the command line . This script assumes that
-.NET 6.0 SDK or newer is installed. Other dependencies tools are downloaded
+.NET 8.0 SDK or newer is installed. Other dependencies tools are downloaded
 as needed (nuget, nunit).
 
 Available command (e.g. `./build.ps1 clean`) (commands are not case sensitive):
 
-- `clean`: runs `dotnet clean`
-- `build`: runs `dotnet build` with several implicit steps
+* `clean`: runs `dotnet clean`
+* `build`: runs `dotnet build` with several implicit steps
     (clean, restore, inject version information).
-- `unitTest`: executes NUnit tests in projects named `*.UnitTests`, which
+* `unitTest`: executes NUnit tests in projects named `*.UnitTests`, which
     do not connect to a database.
-- `integrationTest`: executes NUnit tests in projects named `*.Test`,
+* `integrationTest`: executes NUnit tests in projects named `*.Test`,
     which connect to a database. Includes drop and deploy operations for
     installing fresh test databases compatible with Ed-Fi ODS/API 3.4 and 5.3.
-- `buildAndTest`: executes the Build, UnitTest, and IntegrationTest
+* `buildAndTest`: executes the Build, UnitTest, and IntegrationTest
     commands.
-- `package`: builds pre-release and release NuGet packages for the Admin
+* `package`: builds pre-release and release NuGet packages for the Admin
     App web application.
-- `push`: uploads a NuGet package to the NuGet feed.
-- `buildAndDeployToAdminApiDockerContainer`: runs the build operation, update
+* `push`: uploads a NuGet package to the NuGet feed.
+* `buildAndDeployToAdminApiDockerContainer`: runs the build operation, update
     the `appsettings.json` with provided Docker environment variables and copy
     over the latest files to existing AdminApi docker container for testing.
-- `run`: runs the Admin API
+* `run`: runs the Admin API
 
 Note: use the `IsLocalBuild` switch to install NuGet.exe if you do not already
 have it in your local path.
@@ -66,10 +66,10 @@ arguments.
 
 There are three ways of running Admin API:
 
-- `build.ps1 run` to run from the command line.
-- Run inside a container with the help of
+* `build.ps1 run` to run from the command line.
+* Run inside a container with the help of
   [compose-build-dev.yml](../Docker/Compose/pgsql/compose-build-dev.yml).
-- Start from Visual Studio to take advantage of easy debugging integration.
+* Start from Visual Studio to take advantage of easy debugging integration.
 
 There are several launch profiles available either with `build.ps1` or when
 running from Visual Studio. Review
@@ -90,9 +90,9 @@ Docker network from Admin API, because at present both need to access the same
 `EdFi_Admin` and `EdFi_Security` databases. If starting up manually, make sure
 that both Admin API and ODS/API have the same deployment setting:
 
-- `sharedinstance`
-- `yearspecific`
-- `districtspecific`
+* `sharedinstance`
+* `yearspecific`
+* `districtspecific`
 
 In Admin API, you set this value in the `appsettings.json` file under
 `AppSettings.ApiStartupType`. In the ODS/API, you set it as the
@@ -158,20 +158,54 @@ eng/run-dbup-migrations.ps1
 As mentioned above, you can run locally in Docker. See [docker.md](docker.md)
 for more information.
 
-## Testing Admin API
+### Using Keycloak (IDP)
 
-In source code there are two test projects:
+To use Keycloak for authenticating the API, you need to configure the parameters in the OIDC section. Additionally, you must specify with `"UseSelfcontainedAuthorization": false`, that the API’s own authentication will be disabled in favor of using Keycloak.
 
-- Unit tests that are completely isolated.
-- The DB Tests project is a set of _integration_ tests that exercise the
-  repository layer.
+Furthermore, when using Keycloak, the Register and Token endpoints will not be available in Swagger or for direct calls. Attempting to access these endpoints will result in a 404 error.
 
-Additionally there is a set of end-to-end (E2E) tests in Postman. See the [E2E
-Tests/README.md](../Application/EdFi.Ods.AdminApi/E2E%20Tests/README.md) for
-more information on these tests.
+```json
+{
+  "Authentication": {
+    "IssuerUrl": "",
+    "SigningKey": "",
+    "AllowRegistration": false,
+    "OIDC": {
+      "Authority": "https://localhost/auth/realms/edfi-admin-console",
+      "ValidateIssuer": true,
+      "RequireHttpsMetadata": false,
+      "EnableServerCertificateCustomValidationCallback": true
+    }
+  }
+}
+```
 
-All three of these test suites should be 100% green before merging new code into
-the `main` branch.
+### Running Unit Tests, Integration Tests, and Generating Code Coverage Reports
+
+The source code includes two main types of test projects:
+
+* **Unit tests** (`*.UnitTests`):
+  * Run with: `build.ps1 -Command UnitTest`
+  * To collect code coverage, use: `build.ps1 -Command UnitTest -RunCoverageAnalysis`  
+    This will generate an HTML report in the `coveragereport` directory.
+
+* **Integration tests** (`*.DBTests`):  
+  These tests exercise the repository layer and require a database connection.
+  * Run with: `build.ps1 -Command IntegrationTest`
+  * To collect code coverage, use: `build.ps1 -Command IntegrationTest -RunCoverageAnalysis`  
+    This will also generate an HTML report in the `coveragereport` directory.
+
+Alternatively, you can run both unit and integration tests together with:  
+`build.ps1 -Command BuildAndTest [-RunCoverageAnalysis]`
+
+> [!NOTE]
+> Code coverage analysis requires the `reportgenerator` tool.  
+> Install it with: `dotnet tool install -g dotnet-reportgenerator-globaltool`
+
+Additionally, there is a set of end-to-end (E2E) tests in Postman.  
+See [E2E Tests/README.md](../Application/EdFi.Ods.AdminApi/E2E%20Tests/README.md) for more information.
+
+All three test suites should pass successfully before merging new code into the `main` branch.
 
 ## Application Architecture
 
@@ -200,52 +234,3 @@ credentials.
 
 Validation of API requests is configured via
 [FluentValidation](https://docs.fluentvalidation.net/en/latest/).
-
-### Bulk Application Creation
-
-This PowerShell script creates multiple vendors and applications upon execution and stores the generated keys/secrets in a file.
-The script utilizes a CSV file as input to specify the vendors and applications to be created.
-The script prevents duplicate creation of vendors and applications by skipping existing combinations.
-Remember to store keys/secrets securely.
-
-## Instructions
-1. Download the code: `git@github.com:Ed-Fi-Alliance-OSS/AdminAPI-1.x.git`
-2. Open a PowerShell window in Administrator mode and navigate to the /eng/bulk-key-creation folder.
-3. Populate the sample CSV with the required vendor and application information.
-4. Run the following PowerShell command to load modules for Applications creation:
-      ```
-           Import-Module .\Bulk-EdFiOdsApplications.psm1
-      ```    
-5. The Bulk Register Applications can take a number of parameters, copy and modify the following parameter code to fit your needs:
-
-      ```
-      $parameters = @{
-          CSVFilePath = "District details.csv"
-          BaseApiUrl = "https://localhost/AdminApi"
-          NamespacePrefixes = "uri://ed-fi.org/"
-          Key = "YourAdminApiUser"
-          Secret = "yourAdminApiPassword"
-          ClaimsetName = "District Hosted SIS Vendor"
-          logRootPath = "Logs"
-      }
-      ```
-    
-6. Run the following command in the PowerShell window:
-     ```
-       Bulk-EdFiOdsApplications $parameters
-     ```
-
-7. A new file will be create with the Key and Secrets
-###### Parameters definition
- * ` CSVFilePath            `The csv file to be processed
- * ` BaseApiUrl             `The Admin Api url,  Example: https://localhost/AdminApi1x
- * ` namespacePrefixes      `The namespace for the vendor, Example: uri://ed-fi.org/
- * ` Key                    `The Key to authenticate with the API
- * ` Secret                 `The Secret to authenticate with the API
- * ` ClaimsetName           `The claim name that will be assigned to the application,  Ex: "District Hosted SIS Vendor"
- * ` logRootPath            `The Path where you could find the log file
-
- 
-### Logs
-
-By default, the script creates log files, to review them go to the root directory and find the Logs folder.

@@ -4,9 +4,12 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using AutoMapper;
+using EdFi.Ods.AdminApi.Common.Features;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
+using EdFi.Ods.AdminApi.Infrastructure.Documentation;
 using FluentValidation;
 using Swashbuckle.AspNetCore.Annotations;
 
@@ -17,26 +20,25 @@ public class EditVendor : IFeature
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
         AdminApiEndpointBuilder.MapPut(endpoints, "/vendors/{id}", Handle)
-            .WithDefaultDescription()
-            .WithRouteOptions(b => b.WithResponse<VendorModel>(200))
-            .BuildForVersions(AdminApiVersions.V1);
+            .WithDefaultSummaryAndDescription()
+            .WithRouteOptions(b => b.WithResponseCode(200))
+            .BuildForVersions(AdminApiVersions.V2);
     }
 
-    public async Task<IResult> Handle(EditVendorCommand editVendorCommand, IMapper mapper,
-                       Validator validator, Request request, int id)
+    public static async Task<IResult> Handle(EditVendorCommand editVendorCommand, IMapper mapper,
+                       Validator validator, EditVendorRequest request, int id)
     {
-        request.VendorId = id;
+        request.Id = id;
         await validator.GuardAsync(request);
-        var updatedVendor = editVendorCommand.Execute(request);
-        var model = mapper.Map<VendorModel>(updatedVendor);
-        return AdminApiResponse<VendorModel>.Updated(model, "Vendor");
+        editVendorCommand.Execute(request);
+        return Results.Ok();
     }
 
     [SwaggerSchema(Title = "EditVendorRequest")]
-    public class Request : IEditVendor
+    public class EditVendorRequest : IEditVendor
     {
-        [SwaggerSchema(Description = FeatureConstants.VendorIdDescription, Nullable = false)]
-        public int VendorId { get; set; }
+        [SwaggerExclude]
+        public int Id { get; set; }
 
         [SwaggerSchema(Description = FeatureConstants.VendorNameDescription, Nullable = false)]
         public string? Company { get; set; }
@@ -51,11 +53,11 @@ public class EditVendor : IFeature
         public string? ContactEmailAddress { get; set; }
     }
 
-    public class Validator : AbstractValidator<Request>
+    public class Validator : AbstractValidator<EditVendorRequest>
     {
         public Validator()
         {
-            RuleFor(m => m.VendorId).Must(id => id > 0).WithMessage("Please provide valid Vendor Id.");
+            RuleFor(m => m.Id).Must(id => id > 0).WithMessage("Please provide valid Vendor Id.");
             RuleFor(m => m.Company).NotEmpty();
             RuleFor(m => m.Company)
                 .Must(name => !VendorExtensions.IsSystemReservedVendorName(name))

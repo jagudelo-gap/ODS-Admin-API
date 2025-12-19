@@ -4,7 +4,9 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using AutoMapper;
-using EdFi.Ods.AdminApi.Infrastructure;
+using EdFi.Admin.DataAccess.Models;
+using EdFi.Ods.AdminApi.Common.Features;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
 using FluentValidation;
@@ -18,21 +20,20 @@ public class AddVendor : IFeature
     {
         AdminApiEndpointBuilder
             .MapPost(endpoints, "/vendors", Handle)
-            .WithDefaultDescription()
-            .WithRouteOptions(b => b.WithResponse<VendorModel>(201))
-            .BuildForVersions(AdminApiVersions.V1);
+            .WithDefaultSummaryAndDescription()
+            .WithRouteOptions(b => b.WithResponseCode(201))
+            .BuildForVersions(AdminApiVersions.V2);
     }
 
-    public async Task<IResult> Handle(Validator validator, AddVendorCommand addVendorCommand, IMapper mapper, Request request)
+    public async static Task<IResult> Handle(Validator validator, AddVendorCommand addVendorCommand, IMapper mapper, AddVendorRequest request)
     {
         await validator.GuardAsync(request);
         var addedVendor = addVendorCommand.Execute(request);
-        var model = mapper.Map<VendorModel>(addedVendor);
-        return AdminApiResponse<VendorModel>.Created(model, "Vendor", $"/vendors/{model.VendorId}");
+        return Results.Created($"/vendors/{addedVendor.VendorId}", null);
     }
 
     [SwaggerSchema(Title = "AddVendorRequest")]
-    public class Request : IAddVendorModel
+    public class AddVendorRequest : IAddVendorModel
     {
         [SwaggerSchema(Description = FeatureConstants.VendorNameDescription, Nullable = false)]
         public string? Company { get; set; }
@@ -47,7 +48,7 @@ public class AddVendor : IFeature
         public string? ContactEmailAddress { get; set; }
     }
 
-    public class Validator : AbstractValidator<Request>
+    public class Validator : AbstractValidator<AddVendorRequest>
     {
         public Validator()
         {
@@ -58,6 +59,22 @@ public class AddVendor : IFeature
 
             RuleFor(m => m.ContactName).NotEmpty();
             RuleFor(m => m.ContactEmailAddress).NotEmpty().EmailAddress();
+
+            RuleFor(m => m.NamespacePrefixes).Must((vendorNamespacePrefixes) => HaveACorrectLength(vendorNamespacePrefixes))
+                .WithMessage(p => $"'{p.NamespacePrefixes}' exceeds maximum length");
+        }
+
+        private bool HaveACorrectLength(string? vendorNamespacePrefixes)
+        {
+            var namespacePrefixes = vendorNamespacePrefixes?.Split(",")
+            .Where(namespacePrefix => !string.IsNullOrWhiteSpace(namespacePrefix))
+            .Select(namespacePrefix => new VendorNamespacePrefix
+            {
+                NamespacePrefix = namespacePrefix.Trim()
+            })
+            .ToList();
+
+            return namespacePrefixes == null || !namespacePrefixes.Exists(m => m.NamespacePrefix.Length > 255);
         }
     }
 }

@@ -4,41 +4,41 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using AutoMapper;
-using EdFi.Ods.AdminApi.Infrastructure;
+using EdFi.Ods.AdminApi.Common.Features;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
 
-namespace EdFi.Ods.AdminApi.Features.OdsInstances;
+namespace EdFi.Ods.AdminApi.Features.ODSInstances;
 
 public class ReadOdsInstance : IFeature
 {
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
         AdminApiEndpointBuilder.MapGet(endpoints, "/odsInstances", GetOdsInstances)
-            .WithDefaultDescription()
+            .WithDefaultSummaryAndDescription()
             .WithRouteOptions(b => b.WithResponse<OdsInstanceModel[]>(200))
-            .BuildForVersions(AdminApiVersions.V1);
+            .BuildForVersions(AdminApiVersions.V2);
 
         AdminApiEndpointBuilder.MapGet(endpoints, "/odsInstances/{id}", GetOdsInstance)
-            .WithDefaultDescription()
-            .WithRouteOptions(b => b.WithResponse<OdsInstanceModel>(200))
-            .BuildForVersions(AdminApiVersions.V1);
+            .WithDefaultSummaryAndDescription()
+            .WithRouteOptions(b => b.WithResponse<OdsInstanceDetailModel>(200))
+            .BuildForVersions(AdminApiVersions.V2);
     }
 
-    internal Task<IResult> GetOdsInstances(IGetOdsInstancesQuery getOdsInstancesQuery, IMapper mapper, [AsParameters] CommonQueryParams commonQueryParams)
+    internal static Task<IResult> GetOdsInstances(IGetOdsInstancesQuery getOdsInstancesQuery, IMapper mapper, [AsParameters] CommonQueryParams commonQueryParams, int? id, string? name, string? instanceType)
     {
         var odsInstances = mapper.Map<List<OdsInstanceModel>>(getOdsInstancesQuery.Execute(
-            commonQueryParams));
-        return Task.FromResult(AdminApiResponse<List<OdsInstanceModel>>.Ok(odsInstances));
+            commonQueryParams,
+            id,
+            name,
+            instanceType));
+        return Task.FromResult(Results.Ok(odsInstances));
     }
 
-    internal Task<IResult> GetOdsInstance(IGetOdsInstanceQuery getOdsInstanceQuery, IMapper mapper, int id)
+    internal static Task<IResult> GetOdsInstance(IGetOdsInstanceQuery getOdsInstanceQuery, IMapper mapper, int id)
     {
         var odsInstance = getOdsInstanceQuery.Execute(id);
-        if (odsInstance == null)
-        {
-            throw new NotFoundException<int>("odsInstance", id);
-        }
-        var model = mapper.Map<OdsInstanceModel>(odsInstance);
-        return Task.FromResult(AdminApiResponse<OdsInstanceModel>.Ok(model));
+        var model = mapper.Map<OdsInstanceDetailModel>(odsInstance);
+        return Task.FromResult(Results.Ok(model));
     }
 }

@@ -3,29 +3,30 @@
 # The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 # See the LICENSE and NOTICES files in the project root for more information.
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine3.19-amd64@sha256:edc046db633d2eac3acfa494c10c6b7b3b9ff9f66f1ed92cec8021f5ee38d755 as base
-ARG DB=pgsql
-
-RUN apk --no-cache add curl=~8 unzip=~6 dos2unix=~7 bash=~5 gettext=~0 icu=~74 jq=~1 && \
-    if [ "$DB" = "pgsql" ]; then apk --no-cache add postgresql13-client=~13; fi && \
+#tag 8.0-alpine
+FROM mcr.microsoft.com/dotnet/aspnet:8.0.21-alpine3.22@sha256:cb69be896f82e0d73f513c128ece501c7c1f1809c49415a69dc096e013d5314a AS base
+RUN apk upgrade --no-cache && \
+    apk add --no-cache bash=~5 dos2unix=~7 gettext=~0 icu=~76.1-r1 jq=~1 musl=~1.2.5-r10 openssl=3.5.4-r0 postgresql15-client=~15 unzip=~6 && \
+    rm -rf /var/cache/apk/* && \
     addgroup -S edfi && adduser -S edfi -G edfi
 
-FROM base as build
-
+FROM base AS build
 LABEL maintainer="Ed-Fi Alliance, LLC and Contributors <techsupport@ed-fi.org>"
 
-ARG VERSION=latest
+# Alpine image does not contain Globalization Cultures library so we need to install ICU library to get for LINQ expression to work
+# Disable the globaliztion invariant mode (set in base image)
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+ARG ADMIN_API_VERSION
+ENV ADMIN_API_VERSION="${ADMIN_API_VERSION:-2.2.0}"
 ENV ASPNETCORE_HTTP_PORTS=80
 
 WORKDIR /app
 
-COPY --chmod=600 Settings/"${DB}"/appsettings.template.json /app/appsettings.template.json
-COPY --chmod=500 Settings/"${DB}"/run.sh /app/run.sh
-COPY Settings/"${DB}"/log4net.config /app/log4net.txt
+COPY --chmod=500 Settings/pgsql/run.sh /app/run.sh
+COPY Settings/pgsql/log4net.config /app/log4net.txt
 
 RUN umask 0077 && \
-    wget -nv -O /app/AdminApi.zip "https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.Suite3.ODS.AdminApi/versions/${VERSION}/content" && \
+    wget -nv -O /app/AdminApi.zip "https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_apis/packaging/feeds/EdFi/nuget/packages/EdFi.Suite3.ODS.AdminApi/versions/${ADMIN_API_VERSION}/content" && \
     unzip /app/AdminApi.zip AdminApi/* -d /app/ && \
     cp -r /app/AdminApi/. /app/ && \
     rm -f /app/AdminApi.zip && \
@@ -34,8 +35,9 @@ RUN umask 0077 && \
     dos2unix /app/*.json && \
     dos2unix /app/*.sh && \
     dos2unix /app/log4net.config && \
+    chmod 700 /app/*.sh -- ** && \
     rm -f /app/*.exe && \
-    apk del unzip dos2unix curl && \
+    apk del unzip dos2unix && \
     chown -R edfi /app
 
 EXPOSE ${ASPNETCORE_HTTP_PORTS}

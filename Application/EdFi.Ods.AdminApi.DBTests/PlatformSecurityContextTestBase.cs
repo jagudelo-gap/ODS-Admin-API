@@ -10,15 +10,12 @@ using EdFi.Security.DataAccess.Contexts;
 using Microsoft.EntityFrameworkCore;
 using NUnit.Framework;
 using Respawn;
-using Respawn.Graph;
 
 namespace EdFi.Ods.AdminApi.DBTests;
 
 [TestFixture]
 public abstract class PlatformSecurityContextTestBase
 {
-    private Respawner _checkpoint;
-
     protected SqlServerSecurityContext TestContext { get; private set; }
 
     protected enum CheckpointPolicyOptions
@@ -29,22 +26,19 @@ public abstract class PlatformSecurityContextTestBase
 
     protected CheckpointPolicyOptions CheckpointPolicy { get; set; } = CheckpointPolicyOptions.BeforeEachTest;
 
+    private readonly Checkpoint _checkpoint = new()
+    {
+        TablesToIgnore =
+        [
+            "__MigrationHistory", "DeployJournal", "AdminApiDeployJournal"
+        ],
+        SchemasToExclude = []
+    };
+
     protected virtual string ConnectionString => TestContext.Database.GetConnectionString();
 
     protected virtual void AdditionalFixtureSetup()
     {
-    }
-
-    protected virtual async void CreateCheckpoint()
-    {
-        _checkpoint = await Respawner.CreateAsync(ConnectionString, new RespawnerOptions
-        {
-            TablesToIgnore = new Table[]
-        {
-            "__MigrationHistory", "DeployJournal", "AdminApiDeployJournal"
-        },
-            SchemasToExclude = Array.Empty<string>()
-        });
     }
 
     protected abstract SqlServerSecurityContext CreateDbContext();
@@ -56,7 +50,7 @@ public abstract class PlatformSecurityContextTestBase
 
         if (CheckpointPolicy == CheckpointPolicyOptions.BeforeAnyTest)
         {
-            await _checkpoint.ResetAsync(ConnectionString);
+            await _checkpoint.Reset(ConnectionString);
         }
 
         AdditionalFixtureSetup();
@@ -65,8 +59,12 @@ public abstract class PlatformSecurityContextTestBase
     [OneTimeTearDown]
     public async Task FixtureTearDown()
     {
-        await _checkpoint.ResetAsync(ConnectionString);
-        TestContext.Dispose();
+        await _checkpoint.Reset(ConnectionString);
+        if (TestContext != null)
+        {
+            TestContext.Dispose();
+            TestContext = null;
+        }
     }
 
     [SetUp]
@@ -76,7 +74,7 @@ public abstract class PlatformSecurityContextTestBase
 
         if (CheckpointPolicy == CheckpointPolicyOptions.BeforeEachTest)
         {
-            await _checkpoint.ResetAsync(ConnectionString);
+            await _checkpoint.Reset(ConnectionString);
         }
     }
 

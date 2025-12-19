@@ -10,9 +10,6 @@ using EdFi.Security.DataAccess.Models;
 using NUnit.Framework;
 using Shouldly;
 
-using Application = EdFi.Security.DataAccess.Models.Application;
-using ResourceClaim = EdFi.Security.DataAccess.Models.ResourceClaim;
-
 namespace EdFi.Ods.AdminApi.DBTests.Database.QueryTests;
 
 [TestFixture]
@@ -21,14 +18,17 @@ public class GetResourceClaimsAsFlatListQueryTests : SecurityDataTestBase
     [Test]
     public void ShouldGetResourceClaimsAsFlatList()
     {
-        var testApplication = new Application
-        {
-            ApplicationName = "TestApplicationName"
-        };
+        var parentPrefix = "ParentRc";
+        var childPrefix = "ChildRc";
+        var grandChildPrefix = "GrandChildRc";
+        var parentResourceNames = UniqueNameList(parentPrefix, 3);
+        var childrenResourceNames = UniqueNameList(childPrefix, 2);
+        var grandChildResourceNames = UniqueNameList(grandChildPrefix, 2);
 
-        Save(testApplication);
-
-        var testResourceClaims = SetupResourceClaims(testApplication);
+        var testResourceClaims = SetupResourceClaimsWithChildren(
+                parentResourceNames,
+                childrenResourceNames,
+                grandChildResourceNames);
 
         Infrastructure.ClaimSetEditor.ResourceClaim[] results = null;
         using var securityContext = TestContext;
@@ -37,29 +37,25 @@ public class GetResourceClaimsAsFlatListQueryTests : SecurityDataTestBase
         results.Length.ShouldBe(testResourceClaims.Count);
         results.Select(x => x.Name).ShouldBe(testResourceClaims.Select(x => x.ResourceName), true);
         results.Select(x => x.Id).ShouldBe(testResourceClaims.Select(x => x.ResourceClaimId), true);
-        results.All(x => x.Create == false).ShouldBe(true);
-        results.All(x => x.Delete == false).ShouldBe(true);
-        results.All(x => x.Update == false).ShouldBe(true);
-        results.All(x => x.Read == false).ShouldBe(true);
-        results.All(x => x.ParentId.Equals(0)).ShouldBe(true);
-        results.All(x => x.ParentName == null).ShouldBe(true);
-        results.All(x => x.Children.Count == 0).ShouldBe(true);
+        results.All(x => x.Actions == null).ShouldBe(true);
+        //Assert parent Resource Claims
+        results.Count(x => x.ParentId.Equals(0)).ShouldBe(parentResourceNames.Count);
+        results.Count(x => x.Name.StartsWith(parentPrefix)).ShouldBe(parentResourceNames.Count);
+        //Assert child Resource Claims
+        results.Count(x => x.Name.StartsWith(childPrefix)).ShouldBe(parentResourceNames.Count * childrenResourceNames.Count);
+        //Assert grandchild Resource Claims
+        results.Count(x => x.Name.StartsWith(grandChildPrefix)).ShouldBe(parentResourceNames.Count * childrenResourceNames.Count * grandChildResourceNames.Count);
+
     }
+
 
     [Test]
     public void ShouldGetAlphabeticallySortedFlatListForResourceClaims()
     {
-        var testApplication = new Application
-        {
-            ApplicationName = "TestApplicationName"
-        };
-
-        Save(testApplication);
-
         var testClaimSet = new ClaimSet
-        { ClaimSetName = "TestClaimSet_test", Application = testApplication };
+        { ClaimSetName = "TestClaimSet_test" };
         Save(testClaimSet);
-        var testResourceClaims = SetupParentResourceClaimsWithChildren(testClaimSet, testApplication, UniqueNameList("ParentRc", 3), UniqueNameList("ChildRc", 1)).ToList();
+        var testResourceClaims = SetupClaimSetResourceClaimActions(testClaimSet, UniqueNameList("ParentRc", 3), UniqueNameList("ChildRc", 1)).ToList();
         var parentResourceNames = testResourceClaims.Where(x => x.ResourceClaim?.ParentResourceClaim == null)
             .OrderBy(x => x.ResourceClaim.ResourceName).Select(x => x.ResourceClaim?.ResourceName).ToList();
         var childResourceNames = testResourceClaims.Where(x => x.ResourceClaim?.ParentResourceClaim != null)
@@ -74,48 +70,4 @@ public class GetResourceClaimsAsFlatListQueryTests : SecurityDataTestBase
         results.Where(x => x.ParentId != 0).Select(x => x.Name).ToList().ShouldBe(childResourceNames);
     }
 
-    private IReadOnlyCollection<ResourceClaim> SetupResourceClaims(Application testApplication, int resourceClaimCount = 5)
-    {
-        var resourceClaims = new List<ResourceClaim>();
-        foreach (var index in Enumerable.Range(1, resourceClaimCount))
-        {
-            var resourceClaim = new ResourceClaim
-            {
-                ClaimName = $"TestResourceClaim{index:N}",
-                DisplayName = $"TestResourceClaim{index:N}",
-                ResourceName = $"TestResourceClaim{index:N}",
-                Application = testApplication
-            };
-            resourceClaims.Add(resourceClaim);
-        }
-
-        Save(resourceClaims.Cast<object>().ToArray());
-
-        return resourceClaims;
-    }
-
-    //private IReadOnlyCollection<ResourceClaim> SetupParentResourceClaimsWithChildren(Application testApplication, int resourceClaimCount = 5, int childResourceClaimCount = 3)
-    //{
-    //    var parentResourceClaims = Enumerable.Range(1, resourceClaimCount).Select(parentIndex => new ResourceClaim
-    //    {
-    //        ClaimName = $"TestParentResourceClaim{parentIndex}",
-    //        DisplayName = $"TestParentResourceClaim{parentIndex}",
-    //        ResourceName = $"TestParentResourceClaim{parentIndex}",
-    //        Application = testApplication
-    //    }).ToList();
-
-    //    var childResourceClaims = parentResourceClaims.SelectMany(x => Enumerable.Range(1, childResourceClaimCount)
-    //        .Select(childIndex => new ResourceClaim
-    //        {
-    //            ClaimName = $"TestChildResourceClaim{childIndex}",
-    //            DisplayName = $"TestChildResourceClaim{childIndex}",
-    //            ResourceName = $"TestChildResourceClaim{childIndex}",
-    //            Application = testApplication,
-    //            ParentResourceClaim = x
-    //        })).ToList();
-
-    //    Save(childResourceClaims.Cast<object>().ToArray());
-    //    parentResourceClaims.AddRange(childResourceClaims);
-    //    return parentResourceClaims;
-    //}
 }

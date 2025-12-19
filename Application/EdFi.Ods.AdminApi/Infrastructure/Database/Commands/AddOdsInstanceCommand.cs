@@ -28,9 +28,7 @@ public class AddOdsInstanceCommand : IAddOdsInstanceCommand
         {
             Name = newOdsInstance.Name,
             InstanceType = newOdsInstance.InstanceType,
-            Status = newOdsInstance.Status,
-            IsExtended = newOdsInstance.IsExtended ?? false,
-            Version = newOdsInstance.Version,
+            ConnectionString = newOdsInstance.ConnectionString
         };
         _context.OdsInstances.Add(odsInstance);
         _context.SaveChanges();
@@ -42,7 +40,5 @@ public interface IAddOdsInstanceModel
 {
     string? Name { get; }
     string? InstanceType { get; }
-    string? Status { get; set; }
-    bool? IsExtended { get; }
-    string? Version { get; set; }
+    string? ConnectionString { get; }
 }

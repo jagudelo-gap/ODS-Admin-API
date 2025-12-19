@@ -7,6 +7,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using EdFi.Admin.DataAccess.Models;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
+using EdFi.Ods.AdminApi.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
 using NUnit.Framework;
 using Shouldly;
@@ -27,7 +29,7 @@ public class GetProfilesQueryTests : PlatformUsersContextTestBase
         List<Profile> results = null;
         Transaction(usersContext =>
         {
-            var query = new GetProfilesQuery(usersContext);
+            var query = new GetProfilesQuery(usersContext, Testing.GetAppSettings());
             results = query.Execute();
         });
 
@@ -42,5 +44,60 @@ public class GetProfilesQueryTests : PlatformUsersContextTestBase
         {
             ProfileName = $"Test Profile {_profileId++}-{DateTime.Now:O}"
         };
+    }
+
+    [Test]
+    public void Should_retreive_profiles_with_offset_limit()
+    {
+        var profile1 = CreateProfile();
+        var profile2 = CreateProfile();
+        var profile3 = CreateProfile();
+
+        Save(profile1, profile2, profile3);
+
+        List<Profile> results = null;
+        Transaction(usersContext =>
+        {
+            var query = new GetProfilesQuery(usersContext, Testing.GetAppSettings());
+            results = query.Execute(new CommonQueryParams(1, 1), null, null);
+            results.Count.ShouldBe(1);
+        });
+        results.Any(p => p.ProfileName == profile2.ProfileName).ShouldBeTrue();
+    }
+
+    [Test]
+    public void Should_retreive_profiles_with_id()
+    {
+        var profile1 = CreateProfile();
+        var profile2 = CreateProfile();
+
+        Save(profile1, profile2);
+
+        List<Profile> results = null;
+        Transaction(usersContext =>
+        {
+            var query = new GetProfilesQuery(usersContext, Testing.GetAppSettings());
+            results = query.Execute(new CommonQueryParams(0, 5), profile2.ProfileId, null);
+            results.Count.ShouldBe(1);
+        });
+        results.Any(p => p.ProfileName == profile2.ProfileName).ShouldBeTrue();
+    }
+
+    [Test]
+    public void Should_retreive_profiles_with_name()
+    {
+        var profile1 = CreateProfile();
+        var profile2 = CreateProfile();
+
+        Save(profile1, profile2);
+
+        List<Profile> results = null;
+        Transaction(usersContext =>
+        {
+            var query = new GetProfilesQuery(usersContext, Testing.GetAppSettings());
+            results = query.Execute(new CommonQueryParams(0, 5), null, profile2.ProfileName);
+            results.Count.ShouldBe(1);
+        });
+        results.Any(p => p.ProfileName == profile2.ProfileName).ShouldBeTrue();
     }
 }

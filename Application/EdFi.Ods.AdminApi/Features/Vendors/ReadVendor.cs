@@ -4,9 +4,13 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using AutoMapper;
+using EdFi.Ods.AdminApi.Common.Features;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
-using EdFi.Ods.AdminApi.Infrastructure.ErrorHandling;
+using EdFi.Ods.AdminApi.Common.Infrastructure.ErrorHandling;
+using EdFi.Ods.AdminApi.Infrastructure.Extensions;
+using EdFi.Ods.AdminApi.Infrastructure.Helpers;
 
 namespace EdFi.Ods.AdminApi.Features.Vendors;
 
@@ -15,23 +19,26 @@ public class ReadVendor : IFeature
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
         AdminApiEndpointBuilder.MapGet(endpoints, "/vendors", GetVendors)
-            .WithDefaultDescription()
+            .WithDefaultSummaryAndDescription()
             .WithRouteOptions(b => b.WithResponse<VendorModel[]>(200))
-            .BuildForVersions(AdminApiVersions.V1);
+            .BuildForVersions(AdminApiVersions.V2);
 
         AdminApiEndpointBuilder.MapGet(endpoints, "/vendors/{id}", GetVendor)
-            .WithDefaultDescription()
+            .WithDefaultSummaryAndDescription()
             .WithRouteOptions(b => b.WithResponse<VendorModel>(200))
-            .BuildForVersions(AdminApiVersions.V1);
+            .BuildForVersions(AdminApiVersions.V2);
     }
 
-    internal Task<IResult> GetVendors(IGetVendorsQuery getVendorsQuery, IMapper mapper, [AsParameters] CommonQueryParams commonQueryParams)
+    internal static Task<IResult> GetVendors(
+        IGetVendorsQuery getVendorsQuery, IMapper mapper, [AsParameters] CommonQueryParams commonQueryParams, int? id, string? company, string? namespacePrefixes, string? contactName, string? contactEmailAddress)
     {
-        var vendorList = mapper.Map<List<VendorModel>>(getVendorsQuery.Execute(commonQueryParams));
-        return Task.FromResult(AdminApiResponse<List<VendorModel>>.Ok(vendorList));
+        var vendorList = mapper.Map<List<VendorModel>>(getVendorsQuery.Execute(
+            commonQueryParams,
+            id, company, namespacePrefixes, contactName, contactEmailAddress));
+        return Task.FromResult(Results.Ok(vendorList));
     }
 
-    internal Task<IResult> GetVendor(IGetVendorByIdQuery getVendorByIdQuery, IMapper mapper, int id)
+    internal static Task<IResult> GetVendor(IGetVendorByIdQuery getVendorByIdQuery, IMapper mapper, int id)
     {
         var vendor = getVendorByIdQuery.Execute(id);
         if (vendor == null)
@@ -39,6 +46,6 @@ public class ReadVendor : IFeature
             throw new NotFoundException<int>("vendor", id);
         }
         var model = mapper.Map<VendorModel>(vendor);
-        return Task.FromResult(AdminApiResponse<VendorModel>.Ok(model));
+        return Task.FromResult(Results.Ok(model));
     }
 }

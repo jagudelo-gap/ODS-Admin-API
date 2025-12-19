@@ -3,12 +3,16 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using EdFi.Ods.AdminApi.Common.Features;
 using EdFi.Ods.AdminApi.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure.ClaimSetEditor;
-using EdFi.Ods.AdminApi.Infrastructure.ErrorHandling;
+using EdFi.Ods.AdminApi.Common.Infrastructure.ErrorHandling;
+using EdFi.Ods.AdminApi.Infrastructure.Extensions;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.AspNetCore.Mvc;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
+using EdFi.Ods.AdminApi.Common.Infrastructure.Extensions;
 
 namespace EdFi.Ods.AdminApi.Features.ClaimSets;
 
@@ -16,10 +20,10 @@ public class DeleteClaimSet : IFeature
 {
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
-        AdminApiEndpointBuilder.MapDelete(endpoints, "/claimsets/{id}", Handle)
-            .WithDefaultDescription()
-            .WithRouteOptions(b => b.WithResponseCode(200, FeatureConstants.DeletedSuccessResponseDescription))
-            .BuildForVersions(AdminApiVersions.V1);
+        AdminApiEndpointBuilder.MapDelete(endpoints, "/claimSets/{id}", Handle)
+            .WithDefaultSummaryAndDescription()
+            .WithRouteOptions(b => b.WithResponseCode(200, FeatureCommonConstants.DeletedSuccessResponseDescription))
+            .BuildForVersions(AdminApiVersions.V2);
     }
 
     public Task<IResult> Handle(IDeleteClaimSetCommand deleteClaimSetCommand, [FromServices] IGetClaimSetByIdQuery getClaimSetByIdQuery, IGetApplicationsByClaimSetIdQuery getApplications, int id)
@@ -36,18 +40,16 @@ public class DeleteClaimSet : IFeature
             throw new ValidationException(new[] { new ValidationFailure(nameof(id), exception.Message) });
         }
 
-        return Task.FromResult(AdminApiResponse.Deleted("ClaimSet"));
+        return Task.FromResult(Results.Ok("ClaimSet".ToJsonObjectResponseDeleted()));
     }
 
     private static void CheckClaimSetExists(int id, IGetClaimSetByIdQuery query)
     {
-        try
+        var claimSet = query.Execute(id);
+        if (claimSet != null && !claimSet.IsEditable)
         {
-            query.Execute(id);
-        }
-        catch (AdminApiException)
-        {
-            throw new NotFoundException<int>("claimset", id);
+            throw new ValidationException(new[] { new ValidationFailure(nameof(id),
+                $"Claim set ({claimSet.Name}) is system reserved. May not be modified.") });
         }
     }
 

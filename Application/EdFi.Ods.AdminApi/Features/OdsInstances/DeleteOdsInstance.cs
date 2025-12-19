@@ -4,10 +4,11 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using EdFi.Admin.DataAccess.Models;
-using EdFi.Ods.AdminApi.Infrastructure;
+using EdFi.Ods.AdminApi.Common.Features;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
+using EdFi.Ods.AdminApi.Common.Infrastructure.Extensions;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
-using EdFi.Ods.AdminApi.Infrastructure.Extensions;
 using FluentValidation;
 
 namespace EdFi.Ods.AdminApi.Features.OdsInstances;
@@ -17,9 +18,9 @@ public class DeleteOdsInstance : IFeature
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
         AdminApiEndpointBuilder.MapDelete(endpoints, "/odsInstances/{id}", Handle)
-            .WithDefaultDescription()
-            .WithRouteOptions(b => b.WithResponseCode(200, FeatureConstants.DeletedSuccessResponseDescription))
-            .BuildForVersions(AdminApiVersions.V1);
+            .WithDefaultSummaryAndDescription()
+            .WithRouteOptions(b => b.WithResponseCode(200, FeatureCommonConstants.DeletedSuccessResponseDescription))
+            .BuildForVersions(AdminApiVersions.V2);
     }
 
     internal async Task<IResult> Handle(IDeleteOdsInstanceCommand deleteOdsInstanceCommand, Validator validator, int id)
@@ -27,7 +28,7 @@ public class DeleteOdsInstance : IFeature
         var request = new Request() { Id = id };
         await validator.GuardAsync(request);
         deleteOdsInstanceCommand.Execute(request.Id);
-        return await Task.FromResult(AdminApiResponse.Deleted("odsInstance"));
+        return await Task.FromResult(Results.Ok("Ods Instance".ToJsonObjectResponseDeleted()));
     }
 
     public class Validator : AbstractValidator<Request>
@@ -44,6 +45,14 @@ public class DeleteOdsInstance : IFeature
                 .Must(NotHaveApplicationsRelationships)
                 .WithMessage(FeatureConstants.OdsInstanceCantBeDeletedMessage)
                 .When(Exist);
+            RuleFor(m => m.Id)
+                .Must(NotHaveOdsInstanceContextsRelationships)
+                .WithMessage(FeatureConstants.OdsInstanceCantBeDeletedMessage)
+                .When(Exist);
+            RuleFor(m => m.Id)
+                .Must(NotHaveOdsInstanceDerivativesRelationships)
+                .WithMessage(FeatureConstants.OdsInstanceCantBeDeletedMessage)
+                .When(Exist);
         }
 
         private bool Exist(Request request)
@@ -54,8 +63,20 @@ public class DeleteOdsInstance : IFeature
         private bool NotHaveApplicationsRelationships<T>(Request model, int odsIntanceId, ValidationContext<T> context)
         {
             context.MessageFormatter.AppendArgument("Table", "Applications");
-            List<Admin.DataAccess.Models.Application> appList = _getApplicationByOdsInstanceIdQuery.Execute(odsIntanceId) ?? new List<Admin.DataAccess.Models.Application>();
+            List<Application> appList = _getApplicationByOdsInstanceIdQuery.Execute(odsIntanceId) ?? [];
             return appList.Count == 0;
+        }
+
+        private bool NotHaveOdsInstanceContextsRelationships<T>(Request model, int odsIntanceId, ValidationContext<T> context)
+        {
+            context.MessageFormatter.AppendArgument("Table", "OdsInstanceContexts");
+            return OdsInstanceEntity!.OdsInstanceContexts.Count == 0;
+        }
+
+        private bool NotHaveOdsInstanceDerivativesRelationships<T>(Request model, int odsIntanceId, ValidationContext<T> context)
+        {
+            context.MessageFormatter.AppendArgument("Table", "OdsInstanceDerivatives");
+            return OdsInstanceEntity!.OdsInstanceDerivatives.Count == 0;
         }
     }
 

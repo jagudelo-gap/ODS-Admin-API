@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+﻿# SPDX-License-Identifier: Apache-2.0
 # Licensed to the Ed-Fi Alliance under one or more agreements.
 # The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 # See the LICENSE and NOTICES files in the project root for more information.
@@ -48,33 +48,43 @@
 
     .EXAMPLE
        $p = @{
-            ProductionApiUrl = "http://api"
-            AppStartup = "OnPrem"
-            XsdFolder = "/app/Schema"
-            ApiStartupType = "SharedInstance"
-            DatabaseEngine = "PostgreSql"
-            BulkUploadHashCache = "/app/BulkUploadHashCache/"
-            EncryptionKey = "<Generated encryption key>"
-            AdminDB = "host=db-admin;port=5432;username=username;password=password;database=EdFi_Admin;Application Name=EdFi.Ods.AdminApi;"
-            SecurityDB = "host=db-admin;port=5432;username=username;password=password;database=EdFi_Security;Application Name=EdFi.Ods.AdminApi;"
+            Authority        = "http://api"
+            IssuerUrl        = "https://localhost:5001"
+            DatabaseEngine   = "PostgreSql"
+            PathBase         = "adminapi"
+            SigningKey       = "<Generated encryption key>"
+            AdminDB          = "host=db-admin;port=5432;username=username;password=password;database=EdFi_Admin;Application Name=EdFi.Ods.AdminApi;"
+            SecurityDB       = "host=db-admin;port=5432;username=username;password=password;database=EdFi_Security;Application Name=EdFi.Ods.AdminApi;"
         }
 
-        .\build.ps1 -APIVersion "1.2.2" -Configuration Release -DockerEnvValues $p -Command BuildAndDeployToAdminApiDockerContainer
+        .\build.ps1 -APIVersion "2.2.0" -Configuration Release -DockerEnvValues $p -Command BuildAndDeployToAdminApiDockerContainer
+    .EXAMPLE
+       $p = @{
+            Authority        = "http://api"
+            IssuerUrl        = "https://localhost"
+            DatabaseEngine   = "PostgreSql"
+            PathBase         = "adminapi"
+            SigningKey       = "test"
+            AdminDB          = "host=db-admin;port=5432;username=username;password=password;database=EdFi_Admin;Application Name=EdFi.Ods.AdminApi;"
+            SecurityDB       = "host=db-admin;port=5432;username=username;password=password;database=EdFi_Security;Application Name=EdFi.Ods.AdminApi;"
+        }
+
+        ./build.ps1 -APIVersion ${{ inputs.version }} -Configuration Release -DockerEnvValues $p -Command GenerateOpenAPIAndMD
+
 #>
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'False positive')]
 param(
     # Command to execute, defaults to "Build".
     [string]
-    [ValidateSet("Clean", "Build", "BuildAndPublish", "UnitTest", "IntegrationTest",  "PackageApi"
-    , "Push", "BuildAndTest", "BuildAndDeployToAdminApiDockerContainer"
-    , "BuildAndRunAdminApiDevDocker", "RunAdminApiDevDockerContainer", "RunAdminApiDevDockerCompose", "Run",
-    "CopyApplicationFilesToDockerContext", "RemoveApplicationFilesFromDockerContext")]
+    [ValidateSet("Clean", "Build", "GenerateOpenAPIAndMD", "BuildAndPublish", "UnitTest", "IntegrationTest", "PackageApi"
+        , "Push", "BuildAndTest", "BuildAndDeployToAdminApiDockerContainer"
+        , "BuildAndRunAdminApiDevDocker", "RunAdminApiDevDockerContainer", "RunAdminApiDevDockerCompose", "Run", "CopyToDockerContext", "RemoveDockerContextFiles")]
     $Command = "Build",
 
     # Assembly and package version number for Admin API. The current package number is
     # configured in the build automation tool and passed to this script.
     [string]
-    $APIVersion = "1.2.2",
+    $APIVersion = "0.1",
 
     # .NET project build configuration, defaults to "Debug". Options are: Debug, Release.
     [string]
@@ -109,7 +119,23 @@ param(
 
     # Only required with local builds and testing.
     [switch]
-    $IsLocalBuild
+    $IsLocalBuild,
+
+    # Option to run coverlet for code coverage analysis, only applicable when running tests
+    [switch]
+    $RunCoverageAnalysis,
+
+    # Option to run integration tests with or without integrated security
+    [Switch]
+    $UseIntegratedSecurity = $true,
+
+    # Option to run integration tests with no integrated security
+    [string]
+    $DbUsername,
+
+    # Option to run integration tests with no integrated security
+    [string]
+    $DbPassword
 )
 
 $Env:MSBUILDDISABLENODEREUSE = "1"
@@ -117,22 +143,34 @@ $Env:MSBUILDDISABLENODEREUSE = "1"
 $solutionRoot = "$PSScriptRoot/Application"
 $dockerRoot = "$PSScriptRoot/Docker"
 
-$supportedApiVersions = @(
+$supportedApiVersions7x = @(
     @{
-        OdsPackageName = "EdFi.RestApi.Databases.EFA"
-        OdsVersion = "3.4.0"
-        Prerelease = $false
-    },
+        OdsPackageName = "EdFi.Suite3.RestApi.Databases.Standard.5.2.0"
+        OdsVersion     = "7.3.10536"
+        Prerelease     = $false
+        StandardVersion = "5.2.0"
+        DbDeployVersion = "4.1.52"
+    }
+)
+$supportedApiVersions6x = @(
     @{
         OdsPackageName = "EdFi.Suite3.RestApi.Databases"
-        OdsVersion = "5.3.659"
-        Prerelease = $false
+        OdsVersion     = "6.2.3630"
+        Prerelease     = $false
+        StandardVersion = "4.0.0"           # v6.2 uses Db.Deploy 3.2.27, version 4.1.52 is for ODS 7.x.
+        DbDeployVersion = "3.2.27"
     }
 )
 $maintainers = "Ed-Fi Alliance, LLC and contributors"
 
 $appCommonPackageName = "EdFi.Installer.AppCommon"
 $appCommonPackageVersion = "3.0.0"
+
+# Code coverage analysis
+$script:coverageOutputFile = "coverage.cobertura.xml"
+$script:targetDir = "coveragereport"
+
+$script:RunCoverageAnalysis = $RunCoverageAnalysis
 
 Import-Module -Name "$PSScriptRoot/eng/build-helpers.psm1" -Force
 Import-Module -Name "$PSScriptRoot/eng/package-manager.psm1" -Force
@@ -174,6 +212,29 @@ function Compile {
     }
 }
 
+function GenerateOpenAPI {
+    Invoke-Execute {
+        Push-Location $solutionRoot/EdFi.Ods.AdminApi/
+        $outputOpenAPI = "../../docs/api-specifications/openapi-yaml/admin-api-$APIVersion.yaml"
+        $dllPath = "./bin/Release/net8.0/EdFi.Ods.AdminApi.dll"
+
+        try {
+            dotnet tool run swagger tofile --output $outputOpenAPI --yaml $dllPath v2
+        }
+        finally {
+            Pop-Location
+        }
+    }
+}
+
+function GenerateDocumentation {
+    Invoke-Execute {
+        $outputOpenAPI = "docs/api-specifications/openapi-yaml/admin-api-$APIVersion.yaml"
+        $outputMD = "docs/api-specifications/markdown/admin-api-$APIVersion-summary.md"
+        widdershins --search false --omitHeader true --code true --summary $outputOpenAPI -o $outputMD
+    }
+}
+
 function PublishAdminApi {
     Invoke-Execute {
         $project = "$solutionRoot/EdFi.Ods.AdminApi/"
@@ -189,8 +250,8 @@ function RunTests {
         $Filter
     )
 
-    $testAssemblyPath = "$solutionRoot/$Filter/bin/$Configuration/"
-    $testAssemblies = Get-ChildItem -Path $testAssemblyPath -Filter "$Filter.dll" -Recurse
+    $testAssemblyPath = "$solutionRoot/$Filter/"
+    $testAssemblies = Get-ChildItem -Path $testAssemblyPath -Filter "$Filter.csproj" -Recurse
 
     if ($testAssemblies.Length -eq 0) {
         Write-Output "no test assemblies found in $testAssemblyPath"
@@ -199,10 +260,26 @@ function RunTests {
     $testAssemblies | ForEach-Object {
         Write-Output "Executing: dotnet test $($_)"
         Invoke-Execute {
-            dotnet test $_ `
-                --logger "trx;LogFileName=$($_).trx" `
-                --nologo
+            if ($script:RunCoverageAnalysis)
+            {
+                & dotnet test $_ --collect 'XPlat Code Coverage' --logger "trx;LogFileName=$($_).trx" --nologo
+            }
+            else
+            {
+                & dotnet test $_ --logger "trx;LogFileName=$($_).trx" --nologo
+            }
         }
+    }
+}
+
+function GenerateCoverageReport {
+    param (
+        [string]
+        $Filter = "**"
+    )
+
+    Invoke-Execute {
+        reportgenerator -reports:"Application/$Filter/TestResults/**/*.cobertura.xml" -targetdir:"$script:targetDir" -reporttypes:Html
     }
 }
 
@@ -220,24 +297,49 @@ function ResetTestDatabases {
         $OdsVersion,
 
         [switch]
-        $Prerelease
+        $Prerelease,
+
+        [switch]
+        $UseIntegratedSecurity,
+
+        [string]
+        $DbUsername,
+
+        [string]
+        $DbPassword,
+        
+        [string]
+        [Parameter(Mandatory=$true)]
+        $StandardVersion,
+
+        [string]
+        [Parameter(Mandatory=$true)]
+        $DbDeployVersion
     )
 
     Invoke-Execute {
         $arguments = @{
-            RestApiPackageVersion = $OdsVersion
-            RestApiPackageName = $OdsPackageName
-            UseIntegratedSecurity = $true
+            RestApiPackageVersion    = $OdsVersion
+            RestApiPackageName       = $OdsPackageName
+            UseIntegratedSecurity    = $UseIntegratedSecurity
+            StandardVersion          = $StandardVersion
             RestApiPackagePrerelease = $Prerelease
-            NuGetFeed = $EdFiNuGetFeed
+            NuGetFeed                = $EdFiNuGetFeed
+            DbUsername               = $DbUsername
+            DbPassword               = $DbPassword
+            DbDeployVersion          = $DbDeployVersion
         }
 
         Invoke-PrepareDatabasesForTesting @arguments
     }
 }
 
-function IntegrationTests {
-    Invoke-Execute { RunTests -Filter "*.DBTests" }
+function IntegrationTests7x {
+    Invoke-Execute { RunTests -Filter "*AdminApi.DBTests" }
+}
+
+function IntegrationTests6x {
+    Invoke-Execute { RunTests -Filter "*AdminApi.V1.DBTests" }
 }
 
 function RunNuGetPack {
@@ -255,7 +357,9 @@ function RunNuGetPack {
     # NU5100 is the warning about DLLs outside of a "lib" folder. We're
     # deliberately using that pattern, therefore we don't care about the
     # warning.
-    dotnet pack $ProjectPath --output $PSScriptRoot -p:NuspecFile=$nuspecPath -p:NuspecProperties="version=$PackageVersion" /p:NoWarn=NU5100
+    # NU5110 is the warning about ps1 files outside the "tools" folder
+    # NU5111 is a warning about an unrecognized ps1 filename
+    dotnet pack $ProjectPath --output $PSScriptRoot -p:NuspecFile=$nuspecPath -p:NuspecProperties="version=$PackageVersion" /p:NoWarn='"NU5100;NU5110;NU5111"'
 }
 
 function NewDevCertificate {
@@ -276,10 +380,10 @@ function AddAppCommonPackageForInstaller {
     $destinationPath = "$mainPath/publish"
 
     $arguments = @{
-        AppCommonPackageName = $appCommonPackageName
+        AppCommonPackageName    = $appCommonPackageName
         AppCommonPackageVersion = $appCommonPackageVersion
-        NuGetFeed = $EdFiNuGetFeed
-        DestinationPath = $destinationPath
+        NuGetFeed               = $EdFiNuGetFeed
+        DestinationPath         = $destinationPath
     }
 
     Add-AppCommon @arguments
@@ -298,6 +402,15 @@ function Invoke-Build {
     Invoke-Step { DotNetClean }
     Invoke-Step { Restore }
     Invoke-Step { Compile }
+}
+
+function Invoke-GenerateOpenAPIAndMD {
+    Invoke-Step { UpdateAppSettingsForAdminApi }
+    Invoke-Step { DotNetClean }
+    Invoke-Step { Restore }
+    Invoke-Step { Compile }
+    Invoke-Step { GenerateOpenAPI }
+    Invoke-Step { GenerateDocumentation }
 }
 
 function Invoke-SetAssemblyInfo {
@@ -321,8 +434,8 @@ function Invoke-Run {
 
     if ([string]::IsNullOrEmpty($LaunchProfile)) {
         Write-Error "LaunchProfile parameter is required for running Admin Api. Please " +
-                    "specify the LaunchProfile parameter. Valid values include ""EdFi.Ods.AdminApi (Dev)""" +
-                    ", ""EdFi.Ods.AdminApi (Prod)"", ""EdFi.Ods.AdminApi (Docker)"", and ""IIS Express"""
+        "specify the LaunchProfile parameter. Valid values include ""EdFi.Ods.AdminApi (Dev)""" +
+        ", ""EdFi.Ods.AdminApi (Prod)"", ""EdFi.Ods.AdminApi (Docker)"", and ""IIS Express"""
     }
     else {
         Invoke-Execute { dotnet run --project $projectFilePath --launch-profile $LaunchProfile }
@@ -338,21 +451,58 @@ function Invoke-UnitTestSuite {
 }
 
 function Invoke-IntegrationTestSuite {
-    Invoke-Step { InitializeNuGet }
+    param (
+        [Switch]
+        $UseIntegratedSecurity,
 
-    $supportedApiVersions | ForEach-Object {
+        [string]
+        $DbUsername,
+
+        [string]
+        $DbPassword
+    )
+
+    $supportedApiVersions7x | ForEach-Object {
         Write-Output "Running Integration Tests for ODS Version" $_.OdsVersion
 
         Invoke-Step {
             $arguments = @{
-                OdsVersion = $_.OdsVersion
-                OdsPackageName = $_.OdsPackageName
-                Prerelease = $_.Prerelease
+                OdsVersion              = $_.OdsVersion
+                OdsPackageName          = $_.OdsPackageName
+                Prerelease              = $_.Prerelease
+                StandardVersion         = $_.StandardVersion
+                DbDeployVersion         = $_.DbDeployVersion
+                UseIntegratedSecurity   = $UseIntegratedSecurity
+                DbUsername              = $DbUsername
+                DbPassword              = $DbPassword
             }
+
             ResetTestDatabases @arguments
         }
         Invoke-Step {
-            IntegrationTests
+            IntegrationTests7x
+        }
+    }
+
+    $supportedApiVersions6x | ForEach-Object {
+        Write-Output "Running Integration Tests for ODS Version" $_.OdsVersion
+
+        Invoke-Step {
+            $arguments = @{
+                OdsVersion              = $_.OdsVersion
+                OdsPackageName          = $_.OdsPackageName
+                Prerelease              = $_.Prerelease
+                StandardVersion         = $_.StandardVersion
+                DbDeployVersion         = $_.DbDeployVersion
+                UseIntegratedSecurity   = $UseIntegratedSecurity
+                DbUsername              = $DbUsername
+                DbPassword              = $DbPassword
+            }
+
+            ResetTestDatabases @arguments
+        }
+        Invoke-Step {
+            IntegrationTests6x
         }
     }
 }
@@ -369,17 +519,30 @@ function Invoke-BuildDatabasePackage {
 function UpdateAppSettingsForAdminApiDocker {
     $filePath = "$solutionRoot/EdFi.Ods.AdminApi/appsettings.json"
     $json = (Get-Content -Path $filePath) | ConvertFrom-Json
-    $json.AppSettings.ProductionApiUrl = $DockerEnvValues["ProductionApiUrl"]
-    $json.AppSettings.ApiStartupType = $DockerEnvValues["ApiStartupType"]
     $json.AppSettings.DatabaseEngine = $DockerEnvValues["DatabaseEngine"]
     $json.AppSettings.PathBase = $DockerEnvValues["PathBase"]
 
     $json.Authentication.IssuerUrl = $DockerEnvValues["IssuerUrl"]
     $json.Authentication.SigningKey = $DockerEnvValues["SigningKey"]
 
-    $json.ConnectionStrings.Admin = $DockerEnvValues["AdminDB"]
-    $json.ConnectionStrings.Security = $DockerEnvValues["SecurityDB"]
-    $json.Log4NetCore.Log4NetConfigFileName =  "./log4net.config"
+    $json.ConnectionStrings.EdFi_Admin = $DockerEnvValues["AdminDB"]
+    $json.ConnectionStrings.EdFi_Security = $DockerEnvValues["SecurityDB"]
+    $json.Log4NetCore.Log4NetConfigFileName = "./log4net.config"
+    $json | ConvertTo-Json -Depth 10 | Set-Content $filePath
+}
+
+function UpdateAppSettingsForAdminApi {
+    $filePath = "$solutionRoot/EdFi.Ods.AdminApi/appsettings.json"
+    $json = (Get-Content -Path $filePath) | ConvertFrom-Json
+    $json.AppSettings.DatabaseEngine = $DockerEnvValues["DatabaseEngine"]
+    $json.AppSettings.PathBase = $DockerEnvValues["PathBase"]
+
+    $json.Authentication.IssuerUrl = $DockerEnvValues["IssuerUrl"]
+    $json.Authentication.SigningKey = $DockerEnvValues["SigningKey"]
+
+    $json.ConnectionStrings.EdFi_Admin = $DockerEnvValues["AdminDB"]
+    $json.ConnectionStrings.EdFi_Security = $DockerEnvValues["SecurityDB"]
+    $json.Log4NetCore.Log4NetConfigFileName = "log4net/log4net.config"
     $json | ConvertTo-Json -Depth 10 | Set-Content $filePath
 }
 
@@ -393,11 +556,31 @@ function RestartAdminApiContainer {
 }
 
 function BuildAdminApiDevDockerImage {
-    &docker build -t adminapi-dev --no-cache -f "$dockerRoot/dev.pgsql.Dockerfile" .
+    Push-Location $dockerRoot
+    try {
+        ">>> Building dev.pgsql.Dockerfile" | Out-Host
+        &docker build `
+            -t adminapi-dev-pgsql `
+            --build-context assets=$(Resolve-Path "..") `
+            --no-cache `
+            -f "dev.pgsql.Dockerfile" `
+            .
+
+        ">>> Building dev.mssql.Dockerfile" | Out-Host
+        &docker build `
+            -t adminapi-dev-mssql `
+            --build-context assets=$(Resolve-Path "..") `
+            --no-cache `
+            -f "dev.mssql.Dockerfile" `
+            .
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 function RunAdminApiDevDockerContainer {
-    &docker run --env-file "$solutionRoot/EdFi.Ods.AdminApi/.env" -p 80:80 -v "$dockerRoot/Settings/ssl:/ssl/" adminapi-dev
+    &docker run --env-file "$solutionRoot/EdFi.Ods.AdminApi/.env" -p 80:80 -v "$dockerRoot/Settings/ssl:/ssl/" adminapi-dev-pgsql
 }
 
 function RunAdminApiDevDockerCompose {
@@ -416,76 +599,82 @@ function PushPackage {
     $arguments = @{
         PackageFile = $PackageFile
         NuGetApiKey = $NuGetApiKey
-        NuGetFeed = $EdFiNuGetFeed
+        NuGetFeed   = $EdFiNuGetFeed
     }
 
     Invoke-Execute { Push-Package @arguments }
 }
-
 function Invoke-AdminApiDockerDeploy {
-   Invoke-Step { UpdateAppSettingsForAdminApiDocker }
-   Invoke-Step { CopyLatestFilesToAdminApiContainer }
-   Invoke-Step { RestartAdminApiContainer }
+    Invoke-Step { UpdateAppSettingsForAdminApiDocker }
+    Invoke-Step { CopyLatestFilesToAdminApiContainer }
+    Invoke-Step { RestartAdminApiContainer }
 }
 
 function Invoke-BuildAdminApiDevDockerImage {
-   Invoke-Step { BuildAdminApiDevDockerImage }
+    Invoke-Step { BuildAdminApiDevDockerImage }
 }
 
 function Invoke-RunAdminApiDevDockerContainer {
-   Invoke-Step { RunAdminApiDevDockerContainer }
+    Invoke-Step { RunAdminApiDevDockerContainer }
 }
 
 function Invoke-RunAdminApiDevDockerCompose {
-   Invoke-Step { RunAdminApiDevDockerCompose }
+    Invoke-Step { RunAdminApiDevDockerCompose }
 }
 
 function Invoke-PushPackage {
     Invoke-Step { PushPackage }
 }
 
-function CopyApplicationFilesToDockerContext {
-	New-Item -Path "$dockerRoot/Application" -ItemType Directory
-	Copy-Item -Path "$solutionRoot/EdFi.Ods.AdminApi/" -Destination "$dockerRoot/Application/" -Recurse
-	Copy-Item -Path "$solutionRoot/NuGet.Config" -Destination "$dockerRoot/Application/" -Recurse
-}
-
-function Invoke-CopyApplicationFilesToDockerContext {
-	Invoke-Step { CopyApplicationFilesToDockerContext }
-}
-
-function RemoveApplicationFilesFromDockerContext {
-	$destinationApplication = "$dockerRoot/Application/"
-	if (Test-Path $destinationApplication) {
-		Remove-Item $destinationApplication -Recurse -Force
-	}
-}
-
-function Invoke-RemoveApplicationFilesFromDockerContext {
-	Invoke-Step { RemoveApplicationFilesFromDockerContext }
-}
-
 Invoke-Main {
-    if($IsLocalBuild)
-    {
+    if ($IsLocalBuild) {
         $nugetExePath = Install-NugetCli
         Set-Alias nuget $nugetExePath -Scope Global -Verbose
     }
     switch ($Command) {
         Clean { Invoke-Clean }
         Build { Invoke-Build }
+        GenerateOpenAPIAndMD { Invoke-GenerateOpenAPIAndMD }
         BuildAndPublish {
             Invoke-SetAssemblyInfo
             Invoke-Build
             Invoke-Publish
         }
         Run { Invoke-Run }
-        UnitTest { Invoke-UnitTestSuite }
-        IntegrationTest { Invoke-IntegrationTestSuite }
+        UnitTest {
+            Invoke-UnitTestSuite
+
+            if ($script:RunCoverageAnalysis) {
+                Invoke-Step { GenerateCoverageReport }
+            }
+        }
+        IntegrationTest {
+            $arguments = @{
+                UseIntegratedSecurity    = $UseIntegratedSecurity
+                DbUsername               = $DbUsername
+                DbPassword               = $DbPassword
+            }
+
+            Invoke-IntegrationTestSuite @arguments
+
+            if ($script:RunCoverageAnalysis) {
+                Invoke-Step { GenerateCoverageReport }
+            }
+        }
         BuildAndTest {
+            $arguments = @{
+                UseIntegratedSecurity    = $UseIntegratedSecurity
+                DbUsername               = $DbUsername
+                DbPassword               = $DbPassword
+            }
+
             Invoke-Build
             Invoke-UnitTestSuite
-            Invoke-IntegrationTestSuite
+            Invoke-IntegrationTestSuite @arguments
+
+            if ($script:RunCoverageAnalysis) {
+                Invoke-Step { GenerateCoverageReport }
+            }
         }
         Package { Invoke-BuildPackage }
         PackageApi { Invoke-BuildApiPackage }
@@ -494,23 +683,16 @@ Invoke-Main {
             Invoke-Build
             Invoke-AdminApiDockerDeploy
         }
-        BuildAndRunAdminApiDevDocker{
+        BuildAndRunAdminApiDevDocker {
             Invoke-BuildAdminApiDevDockerImage
             Invoke-RunAdminApiDevDockerContainer
         }
-        RunAdminApiDevDockerContainer{
+        RunAdminApiDevDockerContainer {
             Invoke-RunAdminApiDevDockerContainer
         }
-        RunAdminApiDevDockerCompose{
+        RunAdminApiDevDockerCompose {
             Invoke-RunAdminApiDevDockerCompose
         }
-        CopyApplicationFilesToDockerContext{
-			Invoke-RemoveApplicationFilesFromDockerContext
-			Invoke-CopyApplicationFilesToDockerContext
-		}
-		RemoveApplicationFilesFromDockerContext{
-			Invoke-RemoveApplicationFilesFromDockerContext
-		}
         default { throw "Command '$Command' is not recognized" }
     }
 }

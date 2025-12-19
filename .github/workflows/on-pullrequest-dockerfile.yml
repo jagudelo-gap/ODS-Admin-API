@@ -34,10 +34,13 @@ jobs:
       matrix:
         dockerfile:
           [
-            { name: "api-database", path: "Docker/Settings/DB-Admin/pgsql/Dockerfile", type: "published" },
-            { name: "postgres", path: "Docker/api.mssql.Dockerfile", type: "published" },
-            { name: "database", path: "Docker/db.pgsql.admin.Dockerfile", type: "local" },
-            { name: "database", path: "Docker/db.mssql.admin.Dockerfile", type: "local" },
+            { name: "v2-api-database", path: "Docker/Settings/V2/DB-Admin/pgsql/Dockerfile", type: "published" },
+            { name: "v1-api-database", path: "Docker/Settings/V1/DB-Admin/pgsql/Dockerfile", type: "published" },
+            { name: "postgres", path: "Docker/api.pgsql.Dockerfile", type: "published" },
+            { name: "v2-gateway", path: "Docker/Settings/V2/gateway/Dockerfile", type: "local" },
+            { name: "v1-gateway", path: "Docker/Settings/V1/gateway/Dockerfile", type: "local" },
+            { name: "v2-database", path: "Docker/V2/db.pgsql.admin.Dockerfile", type: "local" },
+            { name: "v1-database", path: "Docker/V1/db.pgsql.admin.Dockerfile", type: "local" },
             { name: "development", path: "Docker/dev.pgsql.Dockerfile", type: "local" },
           ]
     steps:
@@ -51,8 +54,8 @@ jobs:
           FEED="9f7770ac-66d9-4fbc-b81e-b5ad79002b62"
           PACKAGE="db5612a0-336b-4960-9092-f3be0b63d13e"
 
-          VERSIONS=$(curl https://feeds.dev.azure.com/ed-fi-alliance/$FEED/_apis/Packaging/Feeds/EdFi/Packages/$PACKAGE?includeAllVersions=true)
-          LATEST=$(echo $VERSIONS | jq '[.versions[] | select(.views[].name == "Release") | .version | select(startswith("1."))][0]')
+          VERSIONS=$(curl https://feeds.dev.azure.com/ed-fi-alliance/$FEED/_apis/Packaging/Feeds/EdFi/Packages/$PACKAGE)
+          LATEST=$(echo $VERSIONS | jq '.versions[] | select(.isLatest == true) | .version')
           echo "latest version: $LATEST"
           echo "VERSION=$LATEST" >> $GITHUB_OUTPUT
 
@@ -75,16 +78,20 @@ jobs:
           cd $folder
           dockerfile=$(echo ${{matrix.dockerfile.path}} | awk -F"/" '{print $NF}')
 
-          docker build -f $dockerfile -t ${{ matrix.dockerfile.name }} --build-context assets=.. --build-arg="VERSION=${{ steps.versions.outputs.VERSION }}" .
-
+          lower_path=$(echo "${{ matrix.dockerfile.path }}" | tr '[:upper:]' '[:lower:]')
+          if [[ "$lower_path" == *v2* || "$lower_path" == *v1* ]]
+          then
+            docker build -f $dockerfile -t ${{ matrix.dockerfile.name }} --build-context assets=../.. --build-arg="ADMIN_API_VERSION=${{ steps.versions.outputs.VERSION }}" .
+          else
+            docker build -f $dockerfile -t ${{ matrix.dockerfile.name }} --build-context assets=.. --build-arg="ADMIN_API_VERSION=${{ steps.versions.outputs.VERSION }}" .
+          fi
+          
       - name: Analyze
-        uses: docker/scout-action@b23590dc1e4d09febc00cfcbc51e9e8c0f7ee9f3 # v1.16.1
+        uses: docker/scout-action@67eb1afe777307506aaecb9acd9a0e0389cb99ae # v1.5.0
         with:
           command: cves
           image: local://${{ matrix.dockerfile.name }}
-          sarif-file: sarif-${{ matrix.dockerfile.name }}-${{ strategy.job-index }}.output.json
-          only-severities: critical,high
-          only-fixed: true
+          sarif-file: sarif-${{ matrix.dockerfile.name }}.output.json
           summary: true
 
       - name: Upload SARIF result
@@ -92,4 +99,4 @@ jobs:
         if: ${{ github.event_name != 'pull_request_target' }}
         uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 #codeql-bundle-v3.28.0
         with:
-          sarif_file: sarif-${{ matrix.dockerfile.name }}-${{ strategy.job-index }}.output.json
+          sarif_file: sarif-${{ matrix.dockerfile.name }}.output.json

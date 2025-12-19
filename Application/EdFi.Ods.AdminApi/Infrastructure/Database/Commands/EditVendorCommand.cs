@@ -6,6 +6,7 @@
 using EdFi.Admin.DataAccess.Contexts;
 using EdFi.Admin.DataAccess.Models;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
+using EdFi.Ods.AdminApi.Common.Infrastructure.ErrorHandling;
 using Microsoft.EntityFrameworkCore;
 using VendorUser = EdFi.Admin.DataAccess.Models.User;
 
@@ -23,13 +24,13 @@ public class EditVendorCommand
     public Vendor Execute(IEditVendor changedVendorData)
     {
         var vendor = _context.Vendors
-            .Include(x => x.VendorNamespacePrefixes)
-            .Include(x => x.Users)
-            .SingleOrDefault(v => v.VendorId == changedVendorData.VendorId) ?? throw new NotFoundException<int>("vendor", changedVendorData.VendorId);
+            .Include(v => v.VendorNamespacePrefixes)
+            .Include(v => v.Users)
+            .SingleOrDefault(v => v.VendorId == changedVendorData.Id) ?? throw new NotFoundException<int>("vendor", changedVendorData.Id);
 
         if (vendor.IsSystemReservedVendor())
         {
-            throw new Exception("This vendor is required for proper system function and may not be modified.");
+            throw new ArgumentException("This vendor is required for proper system function and may not be modified.");
         }
 
         vendor.VendorName = changedVendorData.Company;
@@ -79,7 +80,7 @@ public class EditVendorCommand
 
 public interface IEditVendor
 {
-    int VendorId { get; set; }
+    int Id { get; set; }
     string? Company { get; set; }
     string? NamespacePrefixes { get; set; }
     string? ContactName { get; set; }

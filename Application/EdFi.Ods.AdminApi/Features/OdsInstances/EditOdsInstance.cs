@@ -4,9 +4,17 @@
 // See the LICENSE and NOTICES files in the project root for more information.
 
 using AutoMapper;
-using EdFi.Ods.AdminApi.Infrastructure;
+using EdFi.Ods.AdminApi.Common.Features;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
+using EdFi.Ods.AdminApi.Common.Infrastructure.ErrorHandling;
+using EdFi.Ods.AdminApi.Common.Infrastructure.Helpers;
+using EdFi.Ods.AdminApi.Common.Infrastructure.Providers.Interfaces;
+using EdFi.Ods.AdminApi.Common.Settings;
+using EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Queries;
+using EdFi.Ods.AdminApi.Infrastructure.Documentation;
 using FluentValidation;
+using Microsoft.Extensions.Options;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace EdFi.Ods.AdminApi.Features.OdsInstances;
@@ -17,78 +25,71 @@ public class EditOdsInstance : IFeature
     {
         AdminApiEndpointBuilder
             .MapPut(endpoints, "/odsInstances/{id}", Handle)
-            .WithDefaultDescription()
+            .WithDefaultSummaryAndDescription()
             .WithRouteOptions(b => b.WithResponseCode(200))
-            .BuildForVersions(AdminApiVersions.V1);
+            .BuildForVersions(AdminApiVersions.V2);
     }
 
-    public async Task<IResult> Handle(
+    public static async Task<IResult> Handle(
         Validator validator,
         IEditOdsInstanceCommand editOdsInstanceCommand,
         IMapper mapper,
+        ISymmetricStringEncryptionProvider encryptionProvider,
+        IOptions<AppSettings> options,
         EditOdsInstanceRequest request,
-        int id
-    )
+        int id)
     {
-        request.OdsInstanceId = id;
+        request.Id = id;
         await validator.GuardAsync(request);
-        var updatedOdsInstance = editOdsInstanceCommand.Execute(request);
-        var model = mapper.Map<OdsInstanceModel>(updatedOdsInstance);
-        return AdminApiResponse<OdsInstanceModel>.Updated(model, "odsInstance");
+
+        string encryptionKey = options.Value.EncryptionKey ?? throw new InvalidOperationException("EncryptionKey can't be null.");
+        if (!string.IsNullOrEmpty(request.ConnectionString))
+            request.ConnectionString = encryptionProvider.Encrypt(request.ConnectionString, Convert.FromBase64String(encryptionKey));
+        else
+            request.ConnectionString = string.Empty;
+        editOdsInstanceCommand.Execute(request);
+        return Results.Ok();
     }
 
     [SwaggerSchema(Title = "EditOdsInstanceRequest")]
     public class EditOdsInstanceRequest : IEditOdsInstanceModel
     {
-        [SwaggerSchema(Description = FeatureConstants.OdsInstanceIdDescription, Nullable = false)]
-        public int OdsInstanceId { get; set; }
-
         [SwaggerSchema(Description = FeatureConstants.OdsInstanceName, Nullable = false)]
         public string? Name { get; set; }
-
         [SwaggerSchema(Description = FeatureConstants.OdsInstanceInstanceType, Nullable = true)]
         public string? InstanceType { get; set; }
-
-        [SwaggerSchema(Description = FeatureConstants.OdsInstanceStatus, Nullable = true)]
-        public string? Status { get; set; }
-
-        [SwaggerSchema(Description = FeatureConstants.OdsInstanceIsExtended, Nullable = true)]
-        public bool? IsExtended { get; set; }
-
-        [SwaggerSchema(Description = FeatureConstants.OdsInstanceVersion, Nullable = true)]
-        public string? Version { get; set; }
+        [SwaggerSchema(Description = FeatureConstants.OdsInstanceConnectionString, Nullable = true)]
+        public string? ConnectionString { get; set; }
+        [SwaggerExclude]
+        public int Id { get; set; }
     }
 
     public class Validator : AbstractValidator<IEditOdsInstanceModel>
     {
         private readonly IGetOdsInstancesQuery _getOdsInstancesQuery;
         private readonly IGetOdsInstanceQuery _getOdsInstanceQuery;
+        private readonly string _databaseEngine;
 
-        public Validator(IGetOdsInstancesQuery getOdsInstancesQuery, IGetOdsInstanceQuery getOdsInstanceQuery)
+        public Validator(IGetOdsInstancesQuery getOdsInstancesQuery, IGetOdsInstanceQuery getOdsInstanceQuery, IOptions<AppSettings> options)
         {
             _getOdsInstancesQuery = getOdsInstancesQuery;
             _getOdsInstanceQuery = getOdsInstanceQuery;
-
-            RuleFor(m => m.OdsInstanceId)
-                .Must(id => id > 0)
-                .WithMessage("Please provide valid Ods instance Id.");
+            _databaseEngine = options.Value.DatabaseEngine ?? throw new NotFoundException<string>("AppSettings", "DatabaseEngine");
 
             RuleFor(m => m.Name)
                 .NotEmpty()
                 .Must(BeAUniqueName)
-                .WithMessage(FeatureConstants.OdsInstanceAlreadyExistsMessage)
-                .When(m => BeAnExistingOdsInstance(m.OdsInstanceId) && NameIsChanged(m));
-
-            RuleFor(m => m.Name).NotEmpty().MaximumLength(100).When(m => !string.IsNullOrEmpty(m.Name));
+                .WithMessage(FeatureConstants.ClaimSetAlreadyExistsMessage)
+                .When(m => BeAnExistingOdsInstance(m.Id) && NameIsChanged(m));
 
             RuleFor(m => m.InstanceType)
-                .NotEmpty()
                 .MaximumLength(100)
                 .When(m => !string.IsNullOrEmpty(m.InstanceType));
 
-            RuleFor(m => m.Status).NotEmpty().MaximumLength(100).When(m => !string.IsNullOrEmpty(m.Status));
-
-            RuleFor(m => m.Version).NotEmpty().MaximumLength(20).When(m => !string.IsNullOrEmpty(m.Version));
+            RuleFor(m => m.ConnectionString)
+                .Must(BeAValidConnectionString)
+                .WithMessage(FeatureConstants.OdsInstanceConnectionStringInvalid)
+                .When(m => !string.IsNullOrEmpty(m.ConnectionString));
         }
 
         private bool BeAnExistingOdsInstance(int id)
@@ -99,12 +100,18 @@ public class EditOdsInstance : IFeature
 
         private bool NameIsChanged(IEditOdsInstanceModel model)
         {
-            return _getOdsInstanceQuery.Execute(model.OdsInstanceId).Name != model.Name;
+            return _getOdsInstanceQuery.Execute(model.Id).Name != model.Name;
         }
 
         private bool BeAUniqueName(string? name)
         {
             return _getOdsInstancesQuery.Execute().TrueForAll(x => x.Name != name);
         }
+        private bool BeAValidConnectionString(string? connectionString)
+        {
+            return ConnectionStringHelper.ValidateConnectionString(_databaseEngine, connectionString);
+        }
+
     }
 }
+

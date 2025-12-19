@@ -11,8 +11,8 @@ on:
 
 env:
   ARTIFACTS_API_KEY: ${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }}
-  ARTIFACTS_FEED_URL: "https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/nuget/v3/index.json"
-  VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: '{"endpointCredentials": [{"endpoint": "https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/nuget/v3/index.json","password": "${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }}"}]}'
+  ARTIFACTS_FEED_URL: ${{ vars.AZURE_ARTIFACTS_FEED_URL }}
+  VSS_NUGET_EXTERNAL_FEED_ENDPOINTS: '{"endpointCredentials": [{"endpoint": "${{ vars.AZURE_ARTIFACTS_FEED_URL }}","password": "${{ secrets.AZURE_ARTIFACTS_PERSONAL_ACCESS_TOKEN }}"}]}'
   MANIFEST_FILE: "_manifest/spdx_2.2/manifest.spdx.json"
   PACKAGE_NAME: "AdminApi"
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
@@ -63,26 +63,75 @@ jobs:
               -Configuration Release `
               -APIVersion $apiVersion
 
+      - name: Get Assembly File Version
+        id: assembly-version
+        shell: pwsh
+        run: |
+          $dllPath = "./Application/EdFi.Ods.AdminApi/publish/EdFi.Ods.AdminApi.dll"
+
+          if (-not (Test-Path $dllPath))
+          {
+              throw "Could not find EdFi.Ods.AdminApi.dll at $dllPath"
+          }
+
+          $fileVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dllPath).FileVersion
+          "file-version=$fileVersion" >> $env:GITHUB_OUTPUT
+
       - name: Setup Nuget.exe
         uses: nuget/setup-nuget@323ab0502cd38fdc493335025a96c8fdb0edc71f #v2.0.1
 
       - name: Replace Installer Version Token
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}"
-          $versionWithoutPrefix = $version -replace '^v', ''
+          $version = "${{ steps.assembly-version.outputs.file-version }}"
+
+          Write-Host "Replacing version token with: $version"
 
           $installerPath = "Installer.AdminApi/Install-AdminApi.psm1"
-          $content = Get-Content $installerPath -Raw
-          $content = $content -replace '"__ADMINAPI_VERSION__"', "`"$versionWithoutPrefix`""
-          $content | Set-Content $installerPath -NoNewline
+
+          if (Test-Path $installerPath)
+          {
+              $content = Get-Content $installerPath -Raw
+              $content = $content -replace '"__ADMINAPI_VERSION__"', "`"$version`""
+              $content | Set-Content $installerPath -NoNewline
+
+              Write-Host "Successfully updated version in $installerPath"
+          }
+          else
+          {
+              throw "Could not find installer module at $installerPath"
+          }
 
           $installScriptPath = "Installer.AdminApi/install.ps1"
-          $content = Get-Content $installScriptPath -Raw
-          $content = $content -replace '"__ADMINAPI_VERSION__"', "`"$versionWithoutPrefix`""
-          $content | Set-Content $installScriptPath -NoNewline
 
-          Write-Output "Updated version to $version (or $versionWithoutPrefix) in all installer"
+          if (Test-Path $installScriptPath)
+          {
+              $content = Get-Content $installScriptPath -Raw
+              $content = $content -replace '"__ADMINAPI_VERSION__"', "`"$version`""
+              $content | Set-Content $installScriptPath -NoNewline
+
+              Write-Host "Successfully updated version in $installScriptPath"
+          }
+          else
+          {
+              throw "Could not find installer script at $installScriptPath"
+          }
+
+          # Verify the replacement
+          $verifyContent = Get-Content $installerPath -Raw
+
+          if ($verifyContent -match '__ADMINAPI_VERSION__')
+          {
+              throw "Token replacement failed - __ADMINAPI_VERSION__ still found in $installerPath"
+          }
+
+          $verifyInstallScriptContent = Get-Content $installScriptPath -Raw
+
+          if ($verifyInstallScriptContent -match '__ADMINAPI_VERSION__')
+          {
+              throw "Token replacement failed - __ADMINAPI_VERSION__ still found in $installScriptPath"
+          }
+          Write-Host "Verification passed - token successfully replaced with version: $version"
 
       - name: Create NuGet Packages
         if: success()
@@ -112,11 +161,10 @@ jobs:
 
   sbom-create:
     name: Create SBOM
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs: pack
     permissions:
-      actions: read
-      contents: write
+      actions: write
     outputs:
       sbom-hash-code: ${{ steps.sbom-hash-code.outputs.sbom-hash-code }}
     steps:
@@ -167,7 +215,7 @@ jobs:
 
   sbom-attach:
     name: Attach SBOM file
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs:
       - sbom-create
       - pack
@@ -229,7 +277,7 @@ jobs:
   publish-package:
     name: Publish NuGet Package
     needs: pack
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     defaults:
       run:
         shell: pwsh
@@ -257,7 +305,7 @@ jobs:
 
   docker-publish:
     name: Publish to Docker Hub
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     needs:
       - publish-package
     steps:
@@ -278,11 +326,12 @@ jobs:
              PACKAGEVERSION=${REF}
           fi
 
-          if [[ $PACKAGEVERSION =~ "alpha" ]]
+          if [[ $PACKAGEVERSION =~ "pre" ]]
           then
             # Pre-releases get the tag "pre"
-            APITAGS="${{ env.IMAGE_NAME }}:pre-1.3"
-            DBTAGS="${{ env.DATABASE_IMAGE_NAME }}:pre-1.3"
+            APITAGS="${{ env.IMAGE_NAME }}:pre"
+            DBTAGS="${{ env.DATABASE_IMAGE_NAME }}:pre"
+            DBTAGS6x="${{ env.DATABASE_IMAGE_NAME }}:pre-for-6.2"
           else
             # Releases get the version, plus shortened form for minor release.
             # We are not using shortened form for major or using "latest"
@@ -295,16 +344,20 @@ jobs:
           SEMVERSION=${PACKAGEVERSION:1}  # strip off the leading 'v'
           echo "APITAGS=$APITAGS" >> $GITHUB_OUTPUT
           echo "DBTAGS=$DBTAGS" >> $GITHUB_OUTPUT
+          echo "DBTAGS6x=$DBTAGS6x" >> $GITHUB_OUTPUT
           echo "VERSION=$SEMVERSION" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5  # v3.8.0
 
       - name: Log in to Docker Hub
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567  # v3.3.0
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_HUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5  # v3.8.0
 
       - name: Extract metadata (tags, labels) for admin api image
         id: metaapi
@@ -316,9 +369,12 @@ jobs:
         uses: docker/build-push-action@b32b51a8eda65d6793cd0494a773d4f6bcef32dc  # v6.11.0
         with:
           context: "{{defaultContext}}:Docker"
-          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:pre-1.3
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:pre
           cache-to: type=inline
-          build-args: VERSION=${{ steps.prepare-tags.outputs.VERSION }}
+          platforms: linux/amd64,linux/arm64
+          build-args: |
+            VERSION=${{ steps.prepare-tags.outputs.VERSION }}
+            ADMIN_API_VERSION=${{ steps.prepare-tags.outputs.VERSION }}
           file: api.pgsql.Dockerfile
           tags: ${{ steps.prepare-tags.outputs.APITAGS }}
           labels: ${{ steps.metaapi.outputs.labels }}
@@ -330,14 +386,28 @@ jobs:
         with:
           images: ${{ env.DATABASE_IMAGE_NAME }}
 
-      - name: Build and push admin api database image
+      - name: Build and push admin api database image 7.x
         uses: docker/build-push-action@b32b51a8eda65d6793cd0494a773d4f6bcef32dc  # v6.11.0
         with:
-          context: "{{defaultContext}}:Docker/Settings/DB-Admin/pgsql"
-          cache-from: type=registry,ref=${{ env.DATABASE_IMAGE_NAME }}:pre-1.3
+          context: "{{defaultContext}}:Docker/Settings/V2/DB-Admin/pgsql"
+          cache-from: type=registry,ref=${{ env.DATABASE_IMAGE_NAME }}:pre
           cache-to: type=inline
-          build-args: VERSION=${{ steps.prepare-tags.outputs.VERSION }}
+          platforms: linux/amd64,linux/arm64
+          build-args: ADMIN_API_VERSION=${{ steps.prepare-tags.outputs.VERSION }}
           file: Dockerfile
           tags: ${{ steps.prepare-tags.outputs.DBTAGS }}
+          labels: ${{ steps.metadatabase.outputs.labels }}
+          push: true
+
+      - name: Build and push admin api database image 6.x
+        uses: docker/build-push-action@b32b51a8eda65d6793cd0494a773d4f6bcef32dc  # v6.11.0
+        if: startsWith(github.event.release.tag_name, 'Pre-Release') || startsWith(github.event.release.tag_name, 'v1.')
+        with:
+          context: "{{defaultContext}}:Docker/Settings/V1/DB-Admin/pgsql"
+          cache-from: type=registry,ref=${{ env.DATABASE_IMAGE_NAME }}:pre-for-6.2
+          cache-to: type=inline
+          build-args: ADMIN_API_VERSION=${{ steps.prepare-tags.outputs.VERSION }}
+          file: Dockerfile
+          tags: ${{ steps.prepare-tags.outputs.DBTAGS6x }}
           labels: ${{ steps.metadatabase.outputs.labels }}
           push: true

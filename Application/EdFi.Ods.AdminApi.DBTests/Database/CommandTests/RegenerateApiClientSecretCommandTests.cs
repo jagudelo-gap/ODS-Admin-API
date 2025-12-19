@@ -9,10 +9,11 @@ using System.Linq;
 using EdFi.Admin.DataAccess.Models;
 using EdFi.Ods.AdminApi.Infrastructure;
 using EdFi.Ods.AdminApi.Infrastructure.Database.Commands;
-using EdFi.Ods.AdminApi.Infrastructure.ErrorHandling;
+using EdFi.Ods.AdminApi.Common.Infrastructure.ErrorHandling;
 using NUnit.Framework;
 using Shouldly;
 using VendorUser = EdFi.Admin.DataAccess.Models.User;
+using EdFi.Ods.AdminApi.Common.Infrastructure;
 
 namespace EdFi.Ods.AdminApi.DBTests.Database.CommandTests;
 
@@ -20,30 +21,12 @@ namespace EdFi.Ods.AdminApi.DBTests.Database.CommandTests;
 public class RegenerateApiClientSecretCommandTests : PlatformUsersContextTestBase
 {
     [Test]
-    public void ShouldFailIfApplicationDoesNotExist()
+    public void ShouldFailIfApiClientDoesNotExist()
     {
         Transaction(usersContext =>
         {
             var command = new RegenerateApiClientSecretCommand(usersContext);
             Assert.Throws<NotFoundException<int>>(() => command.Execute(0));
-        });
-    }
-
-    [Test]
-    public void ShouldReportFailureIfApiClientDoesNotExist()
-    {
-        var application = new Application
-        {
-            ApplicationName = "Api Client Secret Test App",
-            OperationalContextUri = OperationalContext.DefaultOperationalContextUri
-        };
-
-        Save(application);
-
-        Transaction(usersContext =>
-        {
-            var command = new RegenerateApiClientSecretCommand(usersContext);
-            Assert.Throws<InvalidOperationException>(() => command.Execute(application.ApplicationId));
         });
     }
 
@@ -94,7 +77,7 @@ public class RegenerateApiClientSecretCommandTests : PlatformUsersContextTestBas
         //Simulate the automatic hashing performed by using the key/secret on the API.
         Transaction(usersContext =>
         {
-            var odsSideApiClient = usersContext.Clients.Single(c => c.ApiClientId == apiClient.ApiClientId);
+            var odsSideApiClient = usersContext.ApiClients.Single(c => c.ApiClientId == apiClient.ApiClientId);
             odsSideApiClient.Secret = "SIMULATED HASH OF " + originalSecret;
             odsSideApiClient.SecretIsHashed = true;
         });
@@ -103,12 +86,13 @@ public class RegenerateApiClientSecretCommandTests : PlatformUsersContextTestBas
         Transaction(usersContext =>
         {
             var command = new RegenerateApiClientSecretCommand(usersContext);
-            result = command.Execute(application.ApplicationId);
+            result = command.Execute(apiClient.ApiClientId);
         });
 
-        var updatedApiClient = Transaction(usersContext => usersContext.Clients.Single(c => c.ApiClientId == apiClient.ApiClientId));
+        var updatedApiClient = Transaction(usersContext => usersContext.ApiClients.Single(c => c.ApiClientId == apiClient.ApiClientId));
 
         result.Key.ShouldBe(orignalKey);
+        result.Name.ShouldBe("Integration Test");
         result.Secret.ShouldNotBe(originalSecret);
         result.Secret.ShouldNotBe("SIMULATED HASH OF " + originalSecret);
         result.Secret.ShouldNotBeEmpty();

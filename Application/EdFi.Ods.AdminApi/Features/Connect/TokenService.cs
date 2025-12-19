@@ -3,8 +3,11 @@
 // The Ed-Fi Alliance licenses this file to you under the Apache License, Version 2.0.
 // See the LICENSE and NOTICES files in the project root for more information.
 
+using System.Net;
 using System.Security.Authentication;
 using System.Security.Claims;
+using EdFi.Ods.AdminApi.Common.Infrastructure.ErrorHandling;
+using EdFi.Ods.AdminApi.Common.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using OpenIddict.Abstractions;
 
@@ -15,49 +18,50 @@ public interface ITokenService
     Task<ClaimsPrincipal> Handle(OpenIddictRequest request);
 }
 
-public class TokenService : ITokenService
+public class TokenService(IOpenIddictApplicationManager applicationManager) : ITokenService
 {
-    private readonly IOpenIddictApplicationManager _applicationManager;
-
-    public TokenService(IOpenIddictApplicationManager applicationManager)
-    {
-        _applicationManager = applicationManager;
-    }
+    private readonly IOpenIddictApplicationManager _applicationManager = applicationManager;
+    private const string DENIED_AUTHENTICATION_MESSAGE = "Access Denied. Please review your information and try again.";
 
     public async Task<ClaimsPrincipal> Handle(OpenIddictRequest request)
     {
         if (!request.IsClientCredentialsGrantType())
         {
-            throw new NotImplementedException("The specified grant type is not implemented");
+            throw new NotImplementedException(DENIED_AUTHENTICATION_MESSAGE);
         }
 
         var application = await _applicationManager.FindByClientIdAsync(request.ClientId!) ??
-            throw new NotFoundException<string?>("Admin API Client", request.ClientId);
+            throw new NotFoundException<string?>("Access Denied", DENIED_AUTHENTICATION_MESSAGE);
 
         if (!await _applicationManager.ValidateClientSecretAsync(application, request.ClientSecret!))
         {
-            throw new AuthenticationException("Invalid Admin API Client key and secret");
+            throw new AuthenticationException(DENIED_AUTHENTICATION_MESSAGE);
+        }
+        var requestedScopes = request.GetScopes();
+
+        // Get all valid scopes from system definition
+        var allValidScopes = SecurityConstants.Scopes.AllScopes.Select(s => s.Scope).ToList();
+
+        // Check if any of the requested scopes are not in the list of valid scopes
+        var validScopes = requestedScopes.Where(s => allValidScopes.Contains(s)).ToList();
+        if (validScopes.Count == 0)
+        {
+            throw new AdminApiException("The request is missing required scope claims or has invalid scope values")
+            {
+                StatusCode = HttpStatusCode.BadRequest
+            };
         }
 
-        var requestedScopes = request.GetScopes();
-        var appScopes = (await _applicationManager.GetPermissionsAsync(application))
-            .Where(p => p.StartsWith(OpenIddictConstants.Permissions.Prefixes.Scope))
-            .Select(p => p[OpenIddictConstants.Permissions.Prefixes.Scope.Length..])
-            .ToList();
-
-        var missingScopes = requestedScopes.Where(s => !appScopes.Contains(s)).ToList();
-        if (missingScopes.Any())
-            throw new AuthenticationException($"Client is not allowed access to requested scope(s): {string.Join(", ", missingScopes)}");
-
         var displayName = await _applicationManager.GetDisplayNameAsync(application);
-
         var identity = new ClaimsIdentity(JwtBearerDefaults.AuthenticationScheme);
         identity.AddClaim(OpenIddictConstants.Claims.Subject, request.ClientId!, OpenIddictConstants.Destinations.AccessToken);
         identity.AddClaim(OpenIddictConstants.Claims.Name, displayName!, OpenIddictConstants.Destinations.AccessToken);
-
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(requestedScopes);
-
+        foreach (var claim in principal.Claims)
+        {
+            claim.SetDestinations(OpenIddictConstants.Destinations.AccessToken);
+        }
         return principal;
     }
 }
