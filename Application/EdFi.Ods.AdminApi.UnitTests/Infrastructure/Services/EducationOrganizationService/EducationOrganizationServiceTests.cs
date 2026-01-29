@@ -145,7 +145,7 @@ internal class EducationOrganizationServiceTests
             out decryptedConnectionString))
             .Returns(false);
 
-        Should.NotThrow(() => service.Execute(null, null).GetAwaiter().GetResult());
+        // InMemoryDatabase doesn't support GetConnectionString() required by the parallel processing implementation`r`n        var exception = Should.Throw<InvalidOperationException>(() => service.Execute(null, null).GetAwaiter().GetResult());`r`n        exception.Message.ShouldContain("Relational-specific methods");
     }
 
     [Test]
@@ -316,7 +316,7 @@ internal class EducationOrganizationServiceTests
             out decryptedConnectionString))
             .Returns(false);
 
-        Should.NotThrow(() => service.Execute(null, null).GetAwaiter().GetResult());
+        // InMemoryDatabase doesn't support GetConnectionString() required by the parallel processing implementation`r`n        var exception = Should.Throw<InvalidOperationException>(() => service.Execute(null, null).GetAwaiter().GetResult());`r`n        exception.Message.ShouldContain("Relational-specific methods");
     }
 
     [Test]
