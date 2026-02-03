@@ -110,10 +110,10 @@ public class TenantService(IOptionsSnapshot<AppSettingsFile> options,
     }
 
     public async Task<TenantDetailModel?> GetTenantDetailsAsync(
-    IGetOdsInstancesQuery getOdsInstancesQuery,
-    IGetEducationOrganizationQuery getEducationOrganizationQuery,
-    IMapper mapper,
-    string tenantName)
+        IGetOdsInstancesQuery getOdsInstancesQuery,
+        IGetEducationOrganizationQuery getEducationOrganizationQuery,
+        IMapper mapper,
+        string tenantName)
     {
         var tenant = await GetTenantByTenantIdAsync(tenantName);
 

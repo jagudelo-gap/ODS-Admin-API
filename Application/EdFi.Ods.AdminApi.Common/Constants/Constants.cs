@@ -15,7 +15,6 @@ public class Constants
 
 public class ErrorMessagesConstants
 {
-
     /// <summary>
     /// Tenant identifier was not provided in the request header.
     /// </summary>

@@ -12,15 +12,21 @@ namespace EdFi.Admin.DataAccess.Models
 {
     public class EducationOrganizationDto
     {
+        /// <summary>
+        /// auto-incrementing primary key for the Education Organization record
+        /// </summary>
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int Id { get; set; }
 
-        [Key]
+        /// <summary>
+        /// ODS Instance Id for the Education Organization
+        /// </summary>
+        [Required]
         public int InstanceId { get; set; }
 
         /// <summary>
-        /// Friendly name for the Education Organization, to be displayed / set by the end-user
+        /// Friendly name for the Education Organization, to be displayed
         /// </summary>
         [Required]
         [StringLength(100)]
@@ -30,27 +36,27 @@ namespace EdFi.Admin.DataAccess.Models
         public int EducationOrganizationId { get; set; }
 
         /// <summary>
-        /// 
+        /// Name of institution for the Education Organization
         /// </summary>
         [Required]
         [StringLength(75)]
         public string NameOfInstitution { get; set; } = string.Empty;
 
         /// <summary>
-        /// 
+        /// Short name of institution for the Education Organization
         /// </summary>
         [StringLength(75)]
         public string ShortNameOfInstitution { get; set; } = string.Empty;
 
         /// <summary>
-        /// 
+        /// Discriminator for the Education Organization
         /// </summary>
         [Required]
         [StringLength(128)]
         public string Discriminator { get; set; } = string.Empty;
 
         /// <summary>
-        /// 
+        /// Parent Id for the Education Organization
         /// </summary>
         public int ParentId { get; set; }
     }

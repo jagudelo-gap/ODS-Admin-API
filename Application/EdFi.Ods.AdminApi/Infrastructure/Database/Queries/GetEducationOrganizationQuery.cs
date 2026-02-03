@@ -23,7 +23,6 @@ public class GetEducationOrganizationQuery(AdminApiDbContext adminApiDbContext) 
         return _adminApiDbContext.EducationOrganizations.ToList();
     }
 
-
     public List<EducationOrganization> Execute(int odsInstanceId)
     {
         return _adminApiDbContext.EducationOrganizations
