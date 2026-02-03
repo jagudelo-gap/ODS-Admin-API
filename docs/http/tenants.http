@@ -43,7 +43,7 @@ Tenant: tenant1
 GET {{adminapi_url}}/v2/tenants/details
 Content-Type: application/json
 Authorization: bearer {{token}}
-Tenant: default
+Tenant: tenant1
 
 ### Create tenant
 POST {{adminapi_url}}/v2/tenants

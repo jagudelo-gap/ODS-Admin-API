@@ -52,9 +52,9 @@ public class TenantEducationOrganizationModel
     public string InstanceName { get; set; }
     public long EducationOrganizationId { get; set; }
     public string NameOfInstitution { get; set; }
-    public string ShortNameOfInstitution { get; set; }
+    public string? ShortNameOfInstitution { get; set; }
     public string Discriminator { get; set; }
-    public long ParentId { get; set; }
+    public long? ParentId { get; set; }
 
     public TenantEducationOrganizationModel()
     {

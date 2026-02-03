@@ -12,6 +12,8 @@ public interface IGetEducationOrganizationQuery
     List<EducationOrganization> Execute();
 
     List<EducationOrganization> Execute(int odsInstanceId);
+
+    List<EducationOrganization> Execute(int[] odsInstanceIds);
 }
 
 public class GetEducationOrganizationQuery(AdminApiDbContext adminApiDbContext) : IGetEducationOrganizationQuery
@@ -27,6 +29,13 @@ public class GetEducationOrganizationQuery(AdminApiDbContext adminApiDbContext) 
     {
         return _adminApiDbContext.EducationOrganizations
                 .Where(edOrgs => edOrgs.InstanceId == odsInstanceId)
+                .ToList();
+    }
+
+    public List<EducationOrganization> Execute(int[] odsInstanceIds)
+    {
+        return _adminApiDbContext.EducationOrganizations
+                .Where(edOrgs => odsInstanceIds.Contains(edOrgs.InstanceId))
                 .ToList();
     }
 }

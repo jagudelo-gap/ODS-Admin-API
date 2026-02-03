@@ -125,10 +125,17 @@ public class TenantService(IOptionsSnapshot<AppSettingsFile> options,
 
             tenantDetails.OdsInstances = mapper.Map<List<TenantOdsInstanceModel>>(odsInstances);
 
-            foreach (var odsInstance in tenantDetails.OdsInstances)
+            var OdsInstanceIdsList = tenantDetails.OdsInstances.Select(i => i.OdsInstanceId).ToArray();
+
+            if (OdsInstanceIdsList is not null && OdsInstanceIdsList.Length > 0)
             {
-                var edOrgs = getEducationOrganizationQuery.Execute(odsInstance.OdsInstanceId);
-                odsInstance.EducationOrganizations = mapper.Map<List<TenantEducationOrganizationModel>>(edOrgs);
+                var edOrgsList = getEducationOrganizationQuery.Execute(OdsInstanceIdsList);
+
+                foreach (var odsInstance in tenantDetails.OdsInstances)
+                {
+                    var edOrgs = edOrgsList.Where(eo => eo.InstanceId == odsInstance.OdsInstanceId).ToList();
+                    odsInstance.EducationOrganizations = mapper.Map<List<TenantEducationOrganizationModel>>(edOrgs);
+                }
             }
 
             return tenantDetails;

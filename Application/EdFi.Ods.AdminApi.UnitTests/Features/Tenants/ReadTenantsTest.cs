@@ -44,9 +44,6 @@ public class ReadTenantsTest
         var tenantsService = A.Fake<ITenantsService>();
         var memoryCache = A.Fake<IMemoryCache>();
         var options = A.Fake<IOptions<AppSettings>>();
-        var getOdsInstancesQuery = A.Fake<IGetOdsInstancesQuery>();
-        var getEducationOrganizationQuery = A.Fake<IGetEducationOrganizationQuery>();
-        var mapper = A.Fake<IMapper>();
         var tenantName = "tenant1";
 
         var tenant = new TenantModel
