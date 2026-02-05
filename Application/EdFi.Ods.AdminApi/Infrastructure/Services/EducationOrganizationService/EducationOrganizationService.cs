@@ -28,6 +28,7 @@ public class EducationOrganizationService(
     AdminApiDbContext adminApiDbContext,
     ISymmetricStringEncryptionProvider encryptionProvider,
     ITenantSpecificDbContextProvider tenantSpecificDbContextProvider,
+    IServiceScopeFactory serviceScopeFactory,
     ILogger<EducationOrganizationService> logger
         ) : IEducationOrganizationService
 {
@@ -104,8 +105,10 @@ public class EducationOrganizationService(
 
             var edorgs = await GetEducationOrganizationsAsync(decryptedConnectionString, databaseEngine);
 
-            // Create a new DbContext instance for this task to maintain thread safety
-            await using var taskAdminApiDbContext = tenantSpecificDbContextProvider.GetAdminApiDbContext(tenantName);
+            // Create a completely isolated scope with its own DbContext instance for thread safety
+            await using var scope = serviceScopeFactory.CreateAsyncScope();
+            var scopedProvider = scope.ServiceProvider.GetRequiredService<ITenantSpecificDbContextProvider>();
+            var taskAdminApiDbContext = scopedProvider.GetAdminApiDbContext(tenantName);
 
             var existingEducationOrganizations = await taskAdminApiDbContext.EducationOrganizations
             .Where(e => e.InstanceId == odsInstance.OdsInstanceId)

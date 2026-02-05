@@ -19,6 +19,7 @@ using EdFi.Ods.AdminApi.Infrastructure.Services.Tenants;
 using FakeItEasy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
@@ -38,6 +39,7 @@ internal class EducationOrganizationServiceTests
     private string _encryptionKey = null!;
     private ILogger<EducationOrganizationServiceImpl> _logger = null!;
     private ITenantSpecificDbContextProvider _tenantSpecificDbContextProvider = null!;
+    private IServiceScopeFactory _serviceScopeFactory = null!;
 
     [SetUp]
     public void SetUp()
@@ -57,6 +59,7 @@ internal class EducationOrganizationServiceTests
         A.CallTo(() => _options.Value).Returns(_appSettings);
         _logger = A.Fake<ILogger<EducationOrganizationServiceImpl>>();
         _tenantSpecificDbContextProvider = A.Fake<ITenantSpecificDbContextProvider>();
+        _serviceScopeFactory = A.Fake<IServiceScopeFactory>();
     }
 
     [Test]
@@ -78,6 +81,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             _encryptionProvider,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             _logger);
 
         await Should.ThrowAsync<InvalidOperationException>(async () => await service.Execute(null, null))
@@ -102,6 +106,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             _encryptionProvider,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             _logger);
 
         await Should.ThrowAsync<Exception>(async () => await service.Execute(null, null));
@@ -134,6 +139,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             _encryptionProvider,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             _logger);
 
         string decryptedConnectionString = null;
@@ -167,6 +173,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             _encryptionProvider,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             () => processOdsInstanceCallCount++,
             _logger);
 
@@ -186,8 +193,9 @@ internal class EducationOrganizationServiceTests
             AdminApiDbContext adminApiDbContext,
             ISymmetricStringEncryptionProvider encryptionProvider,
             ITenantSpecificDbContextProvider tenantSpecificDbContextProvider,
+            IServiceScopeFactory serviceScopeFactory,
             Action onProcessOdsInstance, ILogger<EducationOrganizationServiceImpl> logger)
-            : base(options, usersContext, adminApiDbContext, encryptionProvider, tenantSpecificDbContextProvider, logger)
+            : base(options, usersContext, adminApiDbContext, encryptionProvider, tenantSpecificDbContextProvider, serviceScopeFactory, logger)
         {
             _onProcessOdsInstance = onProcessOdsInstance;
         }
@@ -219,6 +227,7 @@ internal class EducationOrganizationServiceTests
               adminApiDbContext,
               _encryptionProvider,
               _tenantSpecificDbContextProvider,
+              _serviceScopeFactory,
               _logger);
 
         var exception = await Should.ThrowAsync<NotSupportedException>(async () => await service.Execute(null, null));
@@ -254,6 +263,7 @@ internal class EducationOrganizationServiceTests
               adminApiDbContext,
               _encryptionProvider,
               _tenantSpecificDbContextProvider,
+              _serviceScopeFactory,
               _logger);
 
         string decryptedConnectionString = null;
@@ -288,6 +298,7 @@ internal class EducationOrganizationServiceTests
         adminApiDbContext,
         _encryptionProvider,
         _tenantSpecificDbContextProvider,
+        _serviceScopeFactory,
         () => processOdsInstanceCallCount++,
         _logger);
 
@@ -335,6 +346,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             _encryptionProvider,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             processedInstanceIds,
             _logger);
 
@@ -391,6 +403,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             _encryptionProvider,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             processedInstanceIds,
             _logger);
 
@@ -432,6 +445,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             _encryptionProvider,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             processedInstanceIds,
             _logger);
 
@@ -498,6 +512,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             fakeEncryption,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             () => ++callCount == 2, // Fail on second call
             fakeLogger);
 
@@ -554,6 +569,7 @@ internal class EducationOrganizationServiceTests
             adminApiDbContext,
             fakeEncryption,
             _tenantSpecificDbContextProvider,
+            _serviceScopeFactory,
             () =>
             {
                 callCount++;
@@ -578,9 +594,10 @@ internal class EducationOrganizationServiceTests
             AdminApiDbContext adminApiDbContext,
             ISymmetricStringEncryptionProvider encryptionProvider,
             ITenantSpecificDbContextProvider tenantSpecificDbContextProvider,
+            IServiceScopeFactory serviceScopeFactory,
             List<int> processedInstanceIds,
             ILogger<EducationOrganizationServiceImpl> logger)
-            : base(options, usersContext, adminApiDbContext, encryptionProvider, tenantSpecificDbContextProvider, logger)
+            : base(options, usersContext, adminApiDbContext, encryptionProvider, tenantSpecificDbContextProvider, serviceScopeFactory, logger)
         {
             _processedInstanceIds = processedInstanceIds;
         }
@@ -615,9 +632,10 @@ internal class EducationOrganizationServiceTests
             AdminApiDbContext adminApiDbContext,
             ISymmetricStringEncryptionProvider encryptionProvider,
             ITenantSpecificDbContextProvider tenantSpecificDbContextProvider,
+            IServiceScopeFactory serviceScopeFactory,
             Func<bool> shouldFail,
             ILogger<EducationOrganizationServiceImpl> logger)
-            : base(options, usersContext, adminApiDbContext, encryptionProvider, tenantSpecificDbContextProvider, logger)
+            : base(options, usersContext, adminApiDbContext, encryptionProvider, tenantSpecificDbContextProvider, serviceScopeFactory, logger)
         {
             _shouldFail = shouldFail;
         }
@@ -632,7 +650,7 @@ internal class EducationOrganizationServiceTests
             return Task.FromResult(new List<EducationOrganizationResult>());
         }
 
-        public override async Task ProcessOdsInstanceAsync(string tenantName, IUsersContext usersContext, AdminApiDbContext adminApiDbContext, string encryptionKey, string databaseEngine, int? instanceId)
+        public override async Task ProcessOdsInstanceAsync(string tenantName, IUsersContext usersContext, AdminApiDbContext adminApiDbContext, string encryptionKey, string databaseEngine, int? instanceId = null)
         {
             var odsInstances = instanceId.HasValue
                 ? await usersContext.OdsInstances
@@ -647,7 +665,7 @@ internal class EducationOrganizationServiceTests
                 {
                     try
                     {
-                        var edorgs = await GetEducationOrganizationsAsync("test-connection", databaseEngine);
+                        _ = await GetEducationOrganizationsAsync("test-connection", databaseEngine);
                     }
                     catch (Exception)
                     {
