@@ -178,8 +178,8 @@ public class EducationOrganizationServiceTests : PlatformUsersContextTestBase
         mockServiceProvider.Setup(x => x.GetService(typeof(ITenantSpecificDbContextProvider)))
             .Returns(tenantSpecificProvider);
         
-        var asyncScope = new AsyncServiceScope(new ServiceProviderAsyncDisposableWrapper(mockServiceProvider.Object));
-        mockServiceScopeFactory.Setup(x => x.CreateAsyncScope()).Returns(asyncScope);
+        var mockScope = new ServiceProviderAsyncDisposableWrapper(mockServiceProvider.Object);
+        mockServiceScopeFactory.Setup(x => x.CreateScope()).Returns(mockScope);
         
         return mockServiceScopeFactory;
     }
