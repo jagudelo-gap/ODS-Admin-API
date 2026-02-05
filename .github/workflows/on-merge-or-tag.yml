@@ -74,6 +74,7 @@ jobs:
         run: |
           $version = "${{ steps.versions.outputs.admin-api }}"
           $tag = $version -replace "v","Pre-Release-v"
+          Write-Host "Using tag: $tag"
 
           $body = @{
             tag_name = "$tag"
