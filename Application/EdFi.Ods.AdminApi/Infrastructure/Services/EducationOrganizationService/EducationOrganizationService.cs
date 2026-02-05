@@ -69,55 +69,51 @@ public class EducationOrganizationService(
             }
             var tenantSpecificAdminApiDbContext = tenantSpecificDbContextProvider.GetAdminApiDbContext(tenantName!);
             var tenantSpecificUsersContext = tenantSpecificDbContextProvider.GetUsersContext(tenantName!);
-            await ProcessOdsInstanceAsync(tenantSpecificUsersContext, tenantSpecificAdminApiDbContext, encryptionKey, databaseEngine);
+            await ProcessOdsInstanceAsync(tenantName, tenantSpecificUsersContext, tenantSpecificAdminApiDbContext, encryptionKey, databaseEngine);
         }
         else
         {
-            await ProcessOdsInstanceAsync(usersContext, adminApiDbContext, encryptionKey, databaseEngine, instanceId);
+            await ProcessOdsInstanceAsync("default", usersContext, adminApiDbContext, encryptionKey, databaseEngine, instanceId);
         }
     }
 
-    public virtual async Task ProcessOdsInstanceAsync(IUsersContext usersContext, AdminApiDbContext adminApiDbContext, string encryptionKey, string databaseEngine, int? instanceId = null)
+    public virtual async Task ProcessOdsInstanceAsync(string tenantName, IUsersContext usersContext, AdminApiDbContext adminApiDbContext, string encryptionKey, string databaseEngine, int? instanceId = null)
     {
-        if (instanceId.HasValue)
-        {
-            var odsInstance = await usersContext.OdsInstances
-                .FirstOrDefaultAsync(oi => oi.OdsInstanceId == instanceId.Value);
+        var odsInstances = instanceId.HasValue
+            ? await usersContext.OdsInstances
+                .Where(o => o.OdsInstanceId == instanceId.Value)
+                .ToListAsync()
+            : await usersContext.OdsInstances.ToListAsync();
 
-            if (odsInstance != null)
-            {
-                await RefreshEducationOrganizationsAsync(adminApiDbContext, encryptionKey, databaseEngine, odsInstance);
-            }
-            else
-            {
-                logger.LogWarning("ODS Instance with ID {InstanceId} not found. Skipping education organization synchronization for this instance.", instanceId.Value);
-            }
-        }
-        else
-        {
-            var odsInstances = await usersContext.OdsInstances.ToListAsync();
-            foreach (var odsInstance in odsInstances)
-            {
-                await RefreshEducationOrganizationsAsync(adminApiDbContext, encryptionKey, databaseEngine, odsInstance);
-            }
-        }
+        // Process all OdsInstances in parallel using Task.WhenAll
+        var tasks = odsInstances.Select(odsInstance =>
+            RefreshEducationOrganizationsAsync(tenantName, encryptionKey, databaseEngine, odsInstance)
+        );
+
+        await Task.WhenAll(tasks);
     }
 
-    private async Task RefreshEducationOrganizationsAsync(AdminApiDbContext adminApiDbContext, string encryptionKey, string databaseEngine, Admin.DataAccess.Models.OdsInstance odsInstance)
+    private async Task RefreshEducationOrganizationsAsync(string tenantName, string encryptionKey, string databaseEngine, Admin.DataAccess.Models.OdsInstance odsInstance)
     {
-        if (encryptionProvider.TryDecrypt(odsInstance.ConnectionString, Convert.FromBase64String(encryptionKey), out var decryptedConnectionString))
+        try
         {
+            if (!encryptionProvider.TryDecrypt(odsInstance.ConnectionString, Convert.FromBase64String(encryptionKey), out var decryptedConnectionString))
+            {
+                logger.LogError("Failed to decrypt connection string for ODS Instance ID {OdsInstanceId}. Skipping education organization synchronization for this instance.", odsInstance.OdsInstanceId);
+            }
 
             var edorgs = await GetEducationOrganizationsAsync(decryptedConnectionString, databaseEngine);
 
-            Dictionary<long, EducationOrganization>? existingEducationOrganizations;
+            // Create a new DbContext instance for this task to maintain thread safety
+            await using var taskAdminApiDbContext = tenantSpecificDbContextProvider.GetAdminApiDbContext(tenantName);
 
-            existingEducationOrganizations = await adminApiDbContext.EducationOrganizations
+            var existingEducationOrganizations = await taskAdminApiDbContext.EducationOrganizations
             .Where(e => e.InstanceId == odsInstance.OdsInstanceId)
             .ToDictionaryAsync(e => e.EducationOrganizationId);
 
             var currentSourceIds = new HashSet<long>(edorgs.Select(e => e.EducationOrganizationId));
 
+            // Update or add education organizations
             foreach (var edorg in edorgs)
             {
                 if (existingEducationOrganizations.TryGetValue(edorg.EducationOrganizationId, out var existing))
@@ -131,7 +127,7 @@ public class EducationOrganizationService(
                 }
                 else
                 {
-                    adminApiDbContext.EducationOrganizations.Add(new EducationOrganization
+                    taskAdminApiDbContext.EducationOrganizations.Add(new EducationOrganization
                     {
                         EducationOrganizationId = edorg.EducationOrganizationId,
                         NameOfInstitution = edorg.NameOfInstitution,
@@ -146,22 +142,29 @@ public class EducationOrganizationService(
                 }
             }
 
+            // Remove education organizations that no longer exist in the source
             var educationOrganizationsToDelete = existingEducationOrganizations.Values
                 .Where(e => !currentSourceIds.Contains(e.EducationOrganizationId))
                 .ToList();
 
             if (educationOrganizationsToDelete.Count > 0)
             {
-                adminApiDbContext.EducationOrganizations.RemoveRange(educationOrganizationsToDelete);
+                taskAdminApiDbContext.EducationOrganizations.RemoveRange(educationOrganizationsToDelete);
             }
-        }
-        else
-        {
-            logger.LogError("Failed to decrypt connection string for ODS Instance ID {OdsInstanceId}. Skipping education organization synchronization for this instance.", odsInstance.OdsInstanceId);
-        }
-        await adminApiDbContext.SaveChangesAsync(CancellationToken.None);
-    }
 
+            // Save changes for this OdsInstance
+            await taskAdminApiDbContext.SaveChangesAsync(CancellationToken.None);
+
+            logger.LogInformation("Successfully processed ODS Instance ID {OdsInstanceId}. Updated/Added {EdOrgCount} education organizations.",
+                odsInstance.OdsInstanceId, edorgs.Count);
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't throw - this prevents one failure from blocking others
+            logger.LogError(ex, "Error processing ODS Instance ID {OdsInstanceId}: {ErrorMessage}",
+                odsInstance.OdsInstanceId, ex.Message);
+        }
+    }
 
     public virtual async Task<List<EducationOrganizationResult>> GetEducationOrganizationsAsync(string? connectionString, string databaseEngine)
     {
@@ -254,7 +257,6 @@ public class EducationOrganizationService(
 
         return results;
     }
-
 }
 
 public class EducationOrganizationResult
