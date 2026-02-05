@@ -658,7 +658,7 @@ public class EducationOrganizationServiceTests : PlatformUsersContextTestBase
                 ProcessedInstanceIds.Add(instance.OdsInstanceId);
             }
 
-            await base.ProcessOdsInstanceAsync("default", usersContext, adminApiDbContext, encryptionKey, databaseEngine, instanceId);
+            await base.ProcessOdsInstanceAsync("tenant1", usersContext, adminApiDbContext, encryptionKey, databaseEngine, instanceId);
         }
     }
 }
