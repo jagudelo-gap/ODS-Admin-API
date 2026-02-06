@@ -44,6 +44,7 @@ jobs:
           # Install the MinVer CLI tool
           &dotnet tool install --global minver-cli
 
+          # Provisional workaround for branches that do not have the latest tags
           # Check if we have a v2.x tag anywhere in the repo
           $latestV2Tag = git tag -l "v2.*" --sort=-v:refname | Select-Object -First 1
           
@@ -79,7 +80,7 @@ jobs:
           $body = @{
             tag_name = "$tag"
             target_commitish = "main"
-            name = $version
+            name = $tag
             body = ""
             draft = $false
             prerelease = $true
