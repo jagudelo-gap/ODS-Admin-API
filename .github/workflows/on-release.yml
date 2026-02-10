@@ -60,7 +60,6 @@ jobs:
 
   promote-Azure-artifact:
     name: Promote Azure Artifact
-    if: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -71,13 +70,14 @@ jobs:
       - name: Promote Package
         shell: pwsh
         run: |
-          $arguments = @{
-            PackagesURL = "${{ env.ARTIFACTS_PACKAGES_URL }}"
-            Username    = "${{ env.ARTIFACTS_USERNAME }}"
-            ViewId        = "${{ env.RELEASE_VIEW_ID }}"
-            ReleaseRef  = "${{ github.ref_name }}"
-            Password    = (ConvertTo-SecureString -String "${{ env.ARTIFACTS_API_KEY }}" -AsPlainText -Force)
-          }
+          Write-Host "Promoting package for release ${GITHUB_REF_NAME}"
+          # $arguments = @{
+          #   PackagesURL = "${{ env.ARTIFACTS_PACKAGES_URL }}"
+          #   Username    = "${{ env.ARTIFACTS_USERNAME }}"
+          #   ViewId        = "${{ env.RELEASE_VIEW_ID }}"
+          #   ReleaseRef  = "${{ github.ref_name }}"
+          #   Password    = (ConvertTo-SecureString -String "${{ env.ARTIFACTS_API_KEY }}" -AsPlainText -Force)
+          # }
 
-          Import-Module ./eng/promote-packages.psm1
-          Invoke-Promote @arguments
+          # Import-Module ./eng/promote-packages.psm1
+          # Invoke-Promote @arguments
