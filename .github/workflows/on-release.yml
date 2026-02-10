@@ -70,7 +70,7 @@ jobs:
       - name: Promote Package
         shell: pwsh
         run: |
-          Write-Host "Promoting package for release ${GITHUB_REF_NAME}"
+          Write-Host "Promoting package for release ${github.ref_name}"
           # $arguments = @{
           #   PackagesURL = "${{ env.ARTIFACTS_PACKAGES_URL }}"
           #   Username    = "${{ env.ARTIFACTS_USERNAME }}"
