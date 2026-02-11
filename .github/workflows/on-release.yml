@@ -75,13 +75,13 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Promoting package for release ${github.ref_name}"
-          $arguments = @{
-            PackagesURL = "${{ env.ARTIFACTS_PACKAGES_URL }}"
-            Username    = "${{ env.ARTIFACTS_USERNAME }}"
-            ViewId        = "${{ env.RELEASE_VIEW_ID }}"
-            ReleaseRef  = "${{ github.ref_name }}"
-            Password    = (ConvertTo-SecureString -String "${{ env.ARTIFACTS_API_KEY }}" -AsPlainText -Force)
-          }
+          # $arguments = @{
+          #   PackagesURL = "${{ env.ARTIFACTS_PACKAGES_URL }}"
+          #   Username    = "${{ env.ARTIFACTS_USERNAME }}"
+          #   ViewId        = "${{ env.RELEASE_VIEW_ID }}"
+          #   ReleaseRef  = "${{ github.ref_name }}"
+          #   Password    = (ConvertTo-SecureString -String "${{ env.ARTIFACTS_API_KEY }}" -AsPlainText -Force)
+          # }
 
-          Import-Module ./eng/promote-packages.psm1
-          Invoke-Promote @arguments
+          # Import-Module ./eng/promote-packages.psm1
+          # Invoke-Promote @arguments
