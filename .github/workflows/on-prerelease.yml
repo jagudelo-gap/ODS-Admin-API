@@ -58,6 +58,10 @@ jobs:
           # SemVer
           "admin-api-semver=$($apiVersion -Replace $apiPrefix)" >> $env:GITHUB_OUTPUT
 
+      - name: Install Azure Artifacts Credential Provider
+        shell: bash
+        run: wget -qO- https://aka.ms/install-artifacts-credprovider.sh | bash
+
       - name: Publish .NET Assemblies
         run: |
           $apiVersion = "${{ steps.versions.outputs.admin-api-semver }}"
