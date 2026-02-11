@@ -58,23 +58,6 @@ jobs:
           # SemVer
           "admin-api-semver=$($apiVersion -Replace $apiPrefix)" >> $env:GITHUB_OUTPUT
 
-      - name: Setup Nuget.exe
-        uses: nuget/setup-nuget@323ab0502cd38fdc493335025a96c8fdb0edc71f #v2.0.1
-
-      - name: Authenticate NuGet to Azure Artifacts
-        shell: pwsh
-        run: |
-          nuget sources add `
-            -Name "AzureArtifacts" `
-            -Source "${{ env.ARTIFACTS_FEED_URL }}" `
-            -UserName "az" `
-            -Password "${{ env.ARTIFACTS_API_KEY }}" `
-            -StorePasswordInClearText
-
-      - name: Install Azure Artifacts Credential Provider
-        shell: bash
-        run: wget -qO- https://aka.ms/install-artifacts-credprovider.sh | bash
-
       - name: Publish .NET Assemblies
         run: |
           $apiVersion = "${{ steps.versions.outputs.admin-api-semver }}"
@@ -168,6 +151,7 @@ jobs:
           echo "hash-code=$(sha256sum *.nupkg | base64 -w0)" >> $GITHUB_OUTPUT
 
       - name: Upload Packages as Artifacts
+        if: false
         uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
           name: "${{ env.PACKAGE_NAME }}-NuGet"
@@ -291,6 +275,7 @@ jobs:
       compile-generator: true
 
   publish-package:
+    if: false
     name: Publish NuGet Package
     needs: pack
     runs-on: ubuntu-latest
