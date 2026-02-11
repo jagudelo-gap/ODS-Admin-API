@@ -160,6 +160,7 @@ jobs:
           retention-days: 30
 
   sbom-create:
+    if: false
     name: Create SBOM
     runs-on: ubuntu-latest
     needs: pack
@@ -214,6 +215,7 @@ jobs:
           echo "sbom-hash-code=$sbom_hash" >> $GITHUB_OUTPUT
 
   sbom-attach:
+    if: false
     name: Attach SBOM file
     runs-on: ubuntu-latest
     needs:
@@ -261,6 +263,7 @@ jobs:
 
   provenance-create:
     name: Create Provenance
+    if: false
     needs: pack
     permissions:
       actions: read
