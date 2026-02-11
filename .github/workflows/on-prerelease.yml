@@ -58,6 +58,19 @@ jobs:
           # SemVer
           "admin-api-semver=$($apiVersion -Replace $apiPrefix)" >> $env:GITHUB_OUTPUT
 
+      - name: Setup Nuget.exe
+        uses: nuget/setup-nuget@323ab0502cd38fdc493335025a96c8fdb0edc71f #v2.0.1
+
+      - name: Authenticate NuGet to Azure Artifacts
+        shell: pwsh
+        run: |
+          nuget sources add `
+            -Name "AzureArtifacts" `
+            -Source "${{ env.ARTIFACTS_FEED_URL }}" `
+            -UserName "az" `
+            -Password "${{ env.ARTIFACTS_API_KEY }}" `
+            -StorePasswordInClearText
+
       - name: Install Azure Artifacts Credential Provider
         shell: bash
         run: wget -qO- https://aka.ms/install-artifacts-credprovider.sh | bash
@@ -84,9 +97,6 @@ jobs:
           $fileVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($dllPath).FileVersion
           Write-Host "Extracted file version: $fileVersion"
           "file-version=$fileVersion" >> $env:GITHUB_OUTPUT
-
-      - name: Setup Nuget.exe
-        uses: nuget/setup-nuget@323ab0502cd38fdc493335025a96c8fdb0edc71f #v2.0.1
 
       - name: Replace Installer Version Token
         shell: pwsh
