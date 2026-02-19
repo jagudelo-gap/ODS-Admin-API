@@ -87,6 +87,7 @@ $p = @{
     PackageVersion = "__ADMINAPI_VERSION__"
     PackageSource = $adminApiSource
     AuthenticationSettings = $authenticationSettings
+    StandardVersion = '5.2.0'
 }
 
 if ([string]::IsNullOrWhiteSpace($p.AuthenticationSettings.Authority) -or [string]::IsNullOrWhiteSpace($p.AuthenticationSettings.IssuerUrl) -or [string]::IsNullOrWhiteSpace($p.AuthenticationSettings.SigningKey) -or $p.AuthenticationSettings.AllowRegistration -isnot [bool]) {
