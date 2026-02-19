@@ -92,7 +92,6 @@ param(
     $Configuration = "Debug",
 
     # Ed-Fi's official NuGet package feed for package download and distribution.
-    # "https://pkgs.dev.azure.com/ed-fi-alliance/Ed-Fi-Alliance-OSS/_packaging/EdFi/nuget/v3/index.json",
     [string]
     $EdFiNuGetFeed = "https://pkgs.dev.azure.com/JuanAgudelo0230/adminapi-test/_packaging/jdav-adminapi-test/nuget/v3/index.json",
 
@@ -150,7 +149,7 @@ $supportedApiVersions7x = @(
         OdsVersion     = "7.3.10536"
         Prerelease     = $false
         StandardVersion = "5.2.0"
-        DbDeployVersion = "4.1.52"
+        DbDeployVersion = "4.2.3"
     }
 )
 $supportedApiVersions6x = @(
@@ -158,14 +157,14 @@ $supportedApiVersions6x = @(
         OdsPackageName = "EdFi.Suite3.RestApi.Databases"
         OdsVersion     = "6.2.3630"
         Prerelease     = $false
-        StandardVersion = "4.0.0"           # v6.2 uses Db.Deploy 3.2.27, version 4.1.52 is for ODS 7.x.
+        StandardVersion = "4.0.0"           # v6.2 uses Db.Deploy 3.2.27, version 4.2.3 is for ODS 7.x.
         DbDeployVersion = "3.2.27"
     }
 )
 $maintainers = "Ed-Fi Alliance, LLC and contributors"
 
 $appCommonPackageName = "EdFi.Installer.AppCommon"
-$appCommonPackageVersion = "3.0.0"
+$appCommonPackageVersion = "3.4.0"
 
 # Code coverage analysis
 $script:coverageOutputFile = "coverage.cobertura.xml"
@@ -375,21 +374,6 @@ function NewDevCertificate {
     }
 }
 
-function AddAppCommonPackageForInstaller {
-    $project = "EdFi.Ods.AdminApi"
-    $mainPath = "$solutionRoot/$project"
-    $destinationPath = "$mainPath/publish"
-
-    $arguments = @{
-        AppCommonPackageName    = $appCommonPackageName
-        AppCommonPackageVersion = $appCommonPackageVersion
-        NuGetFeed               = $EdFiNuGetFeed
-        DestinationPath         = $destinationPath
-    }
-
-    Add-AppCommon @arguments
-}
-
 function BuildApiPackage {
     $project = "EdFi.Ods.AdminApi"
     $mainPath = "$solutionRoot/$project"
@@ -509,7 +493,6 @@ function Invoke-IntegrationTestSuite {
 }
 
 function Invoke-BuildApiPackage {
-    Invoke-Step { AddAppCommonPackageForInstaller }
     Invoke-Step { BuildApiPackage }
 }
 
