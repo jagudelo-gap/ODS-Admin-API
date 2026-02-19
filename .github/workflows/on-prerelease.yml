@@ -151,7 +151,6 @@ jobs:
           echo "hash-code=$(sha256sum *.nupkg | base64 -w0)" >> $GITHUB_OUTPUT
 
       - name: Upload Packages as Artifacts
-        if: false
         uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
         with:
           name: "${{ env.PACKAGE_NAME }}-NuGet"
@@ -160,7 +159,6 @@ jobs:
           retention-days: 30
 
   sbom-create:
-    if: false
     name: Create SBOM
     runs-on: ubuntu-latest
     needs: pack
@@ -215,7 +213,6 @@ jobs:
           echo "sbom-hash-code=$sbom_hash" >> $GITHUB_OUTPUT
 
   sbom-attach:
-    if: false
     name: Attach SBOM file
     runs-on: ubuntu-latest
     needs:
@@ -278,7 +275,6 @@ jobs:
       compile-generator: true
 
   publish-package:
-    if: false
     name: Publish NuGet Package
     needs: pack
     runs-on: ubuntu-latest
