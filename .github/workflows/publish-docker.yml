@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       publish-6x-image:
-        description: 'Publish 6.x database image'
+        description: 'Publish 6.x database image '
         required: false
         type: boolean
         default: false
