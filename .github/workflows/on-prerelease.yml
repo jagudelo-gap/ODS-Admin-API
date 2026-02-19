@@ -140,9 +140,9 @@ jobs:
 
           "Building ${{ env.PACKAGE_NAME }} NuGet Package" | Write-Output
           # Admin API
-          # ./build.ps1 -Command PackageApi `
-          #    -APIVersion  $apiVersion `
-          #    -Configuration Release
+          ./build.ps1 -Command PackageApi `
+             -APIVersion  $apiVersion `
+             -Configuration Release
 
       - name: Generate hash for NuGet package
         id: hash-code
