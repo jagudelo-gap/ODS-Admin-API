@@ -40,16 +40,28 @@ $dbConnectionInfo = @{
 Review and edit the following application settings and connection information for Admin App
 
 .EXAMPLE
+Configure Admin Api with V1
+
+    $p = @{
+        ToolsPath = "C:/temp/tools"
+        ApiVersion = "v1"
+        DbConnectionInfo = $dbConnectionInfo
+        PackageVersion = "__ADMINAPI_VERSION__"
+    }
+
+
 Configure Admin Api with Single tenant
 
     $p = @{
         ToolsPath = "C:/temp/tools"
+        ApiVersion = "v2"
         DbConnectionInfo = $dbConnectionInfo
         PackageVersion = "__ADMINAPI_VERSION__"
     }
 
 Configure Admin Api with Multi tenant
     $p = @{
+        ApiVersion = "v2"
         IsMultiTenant = $true
         ToolsPath = "C:/temp/tools"
         DbConnectionInfo = $dbConnectionInfo
@@ -83,6 +95,7 @@ $adminApiSource = "$packageSource/AdminApi"
 
 $p = @{
     ToolsPath = "C:/temp/tools"
+    ApiVersion = "v2"
     DbConnectionInfo = $dbConnectionInfo
     PackageVersion = "__ADMINAPI_VERSION__"
     PackageSource = $adminApiSource
