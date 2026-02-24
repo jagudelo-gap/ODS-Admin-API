@@ -236,11 +236,6 @@ function Install-EdFiOdsAdminApi {
         [Parameter(Mandatory=$true, ParameterSetName="MultiTenant")]
         $Tenants,
 
-        # Set Encrypt=false for all connection strings
-        # Not recomended for production environment.
-        [switch]
-        $UnEncryptedConnection,
-
         [Parameter(Mandatory=$true)]
         [ValidateSet('4.0.0', '5.2.0', '6.0.0')]
         $StandardVersion,
@@ -253,6 +248,18 @@ function Install-EdFiOdsAdminApi {
     Write-InvocationInfo $MyInvocation
 
     Clear-Error
+
+    if($IsMultiTenant.IsPresent -and $AdminApiMode -eq 'v1')
+    {
+        Write-Error "Admin API v1 mode does not support MultiTenant configuration."
+        exit
+    }
+
+    if($AdminApiMode -eq 'v1' -and $StandardVersion -ne '4.0.0')
+    {
+        Write-Error "Admin API v1 mode only supports StandardVersion 4.0.0."
+        exit
+    }
 
     $result = @()
 
@@ -283,7 +290,6 @@ function Install-EdFiOdsAdminApi {
         NoDuration = $NoDuration
         IsMultiTenant = $IsMultiTenant.IsPresent
         Tenants = $Tenants
-        UnEncryptedConnection = $UnEncryptedConnection
         StandardVersion = $StandardVersion
         AdminApiMode = $AdminApiMode
     }
@@ -292,19 +298,6 @@ function Install-EdFiOdsAdminApi {
     {
         Write-Warning "Please make sure required tenant specific Admin, Security databases are already available on the data server."
     }
-
-    if($IsMultiTenant.IsPresent -and $AdminApiMode -eq 'v1')
-    {
-        Write-Error "Admin API v1 mode does not support MultiTenant configuration."
-        exit
-    }
-
-    if($AdminApiMode -eq 'v1' -and $StandardVersion -ne '4.0.0')
-    {
-        Write-Error "Admin API v1 mode only supports StandardVersion 4.0.0."
-        exit
-    }
-
 
     $elapsed = Use-StopWatch {
         $result += Invoke-InstallationPreCheck -Config $Config
@@ -1108,7 +1101,7 @@ function Invoke-TransformMultiTenantConnectionStrings {
             $adminconnString = New-ConnectionString -ConnectionInfo $Config.Tenants[$tenantKey].AdminDbConnectionInfo -SspiUsername $Config.WebApplicationName
             $securityConnString = New-ConnectionString -ConnectionInfo $Config.Tenants[$tenantKey].SecurityDbConnectionInfo -SspiUsername $Config.WebApplicationName
 
-            if ($Config.UnEncryptedConnection) {
+            if ($Config.DbConnectionInfo.Engine -ieq "SqlServer" -and $Config.DbConnectionInfo.UnEncryptedConnection) {
                 $adminconnString += ";Encrypt=false"
                 $securityConnString += ";Encrypt=false"
             }
@@ -1187,7 +1180,7 @@ function Invoke-DbUpScripts {
             foreach ($tenantKey in $Config.Tenants.Keys) {
 
                 $adminConnectionString = Get-AdminInstallConnectionString  $Config.Tenants[$tenantKey].AdminDbConnectionInfo
-                if ($Config.UnEncryptedConnection) {
+                if ($Config.DbConnectionInfo.Engine -ieq "SqlServer" -and $Config.DbConnectionInfo.UnEncryptedConnection) {
                     $adminConnectionString += ";Encrypt=false"
                 }
                 $params["ConnectionString"] = $adminConnectionString
@@ -1197,7 +1190,7 @@ function Invoke-DbUpScripts {
         else
         {
             $adminConnectionString = Get-AdminInstallConnectionString $Config.AdminDbConnectionInfo
-            if ($Config.UnEncryptedConnection) {
+            if ($Config.DbConnectionInfo.Engine -ieq "SqlServer" -and $Config.DbConnectionInfo.UnEncryptedConnection) {
                 $adminConnectionString += ";Encrypt=false"
             }
             $params["ConnectionString"] = $adminConnectionString
