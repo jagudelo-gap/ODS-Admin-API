@@ -242,7 +242,10 @@ function Install-EdFiOdsAdminApi {
 
         [Parameter(Mandatory=$true)]
         [ValidateSet('v1', 'v2')]
-        $AdminApiMode
+        $AdminApiMode,
+
+        [Parameter(Mandatory=$true)]
+        $EncryptionKey
     )
 
     Write-InvocationInfo $MyInvocation
@@ -292,6 +295,7 @@ function Install-EdFiOdsAdminApi {
         Tenants = $Tenants
         StandardVersion = $StandardVersion
         AdminApiMode = $AdminApiMode
+        EncryptionKey = $EncryptionKey
     }
 
     if($IsMultiTenant.IsPresent)
@@ -766,7 +770,7 @@ function Invoke-TransferAppsettings {
 
         $backUpPath = $Config.ApplicationBackupPath
         Write-Warning "The following appsettings will be copied over from existing application: "
-        $appSettings = @('DatabaseEngine', 'adminApiMode', 'ApiStartupType', 'ApiExternalUrl', 'PathBase', 'Log4NetConfigFileName', 'Authority', 'IssuerUrl', 'SigningKey', 'AllowRegistration')
+        $appSettings = @('DatabaseEngine', 'adminApiMode', 'EncryptionKey', 'ApiStartupType', 'ApiExternalUrl', 'PathBase', 'Log4NetConfigFileName', 'Authority', 'IssuerUrl', 'SigningKey', 'AllowRegistration')
         foreach ($property in $appSettings) {
            Write-Host $property;
         }
@@ -778,6 +782,7 @@ function Invoke-TransferAppsettings {
 
         $newSettings.AppSettings.DatabaseEngine = $oldSettings.AppSettings.DatabaseEngine
         $newSettings.AppSettings.adminApiMode = $oldSettings.AppSettings.adminApiMode
+        $newSettings.AppSettings.EncryptionKey = $oldSettings.AppSettings.EncryptionKey
         $newSettings.AppSettings.ApiStartupType = $oldSettings.AppSettings.ApiStartupType
         $newSettings.AppSettings.ApiExternalUrl =  $oldSettings.AppSettings.ApiExternalUrl
         $newSettings.AppSettings.PathBase = $oldSettings.AppSettings.PathBase
@@ -976,6 +981,7 @@ function Invoke-TransformAppSettings {
         $settings = Get-Content $settingsFile | ConvertFrom-Json | ConvertTo-Hashtable
         $settings.AppSettings.DatabaseEngine = $config.engine
         $settings.AppSettings.adminApiMode = $config.adminApiMode
+        $settings.AppSettings.EncryptionKey = $config.EncryptionKey
 
         $settings.AppSettings.MultiTenancy = $config.IsMultiTenant
 
@@ -1049,8 +1055,8 @@ function Invoke-TransformConnectionStrings {
         $adminconnString = New-ConnectionString -ConnectionInfo $Config.AdminDbConnectionInfo -SspiUsername $Config.WebApplicationName
         $securityConnString = New-ConnectionString -ConnectionInfo $Config.SecurityDbConnectionInfo -SspiUsername $Config.WebApplicationName
 
-        
-        if ($Config.UnEncryptedConnection) {
+
+        if ($Config.DbConnectionInfo.Engine -ieq "SqlServer" -and $Config.DbConnectionInfo.UnEncryptedConnection) {
             $adminconnString += ";Encrypt=false"
             $securityConnString += ";Encrypt=false"
         }
@@ -1180,7 +1186,7 @@ function Invoke-DbUpScripts {
             foreach ($tenantKey in $Config.Tenants.Keys) {
 
                 $adminConnectionString = Get-AdminInstallConnectionString  $Config.Tenants[$tenantKey].AdminDbConnectionInfo
-                if ($Config.DbConnectionInfo.Engine -ieq "SqlServer" -and $Config.DbConnectionInfo.UnEncryptedConnection) {
+                if ($Config.DbConnectionInfo.Engine -ieq "SqlServer" -and ($Config.DbConnectionInfo.UnEncryptedConnection.IsPresent -and $Config.DbConnectionInfo.UnEncryptedConnection)) {
                     $adminConnectionString += ";Encrypt=false"
                 }
                 $params["ConnectionString"] = $adminConnectionString
@@ -1190,7 +1196,7 @@ function Invoke-DbUpScripts {
         else
         {
             $adminConnectionString = Get-AdminInstallConnectionString $Config.AdminDbConnectionInfo
-            if ($Config.DbConnectionInfo.Engine -ieq "SqlServer" -and $Config.DbConnectionInfo.UnEncryptedConnection) {
+            if ($Config.DbConnectionInfo.Engine -ieq "SqlServer" -and ($Config.DbConnectionInfo.UnEncryptedConnection.IsPresent -and $Config.DbConnectionInfo.UnEncryptedConnection)) {
                 $adminConnectionString += ";Encrypt=false"
             }
             $params["ConnectionString"] = $adminConnectionString

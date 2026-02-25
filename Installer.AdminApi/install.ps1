@@ -17,6 +17,7 @@ Installs and connects the applications to the database using SQL Authentication
         UseIntegratedSecurity = $false
         Username = "exampleAdmin"
         Password = "examplePassword"
+        UnEncryptedConnection = $true # Optional. Set Encrypt=false for all connection strings. Not recommended for production environment.
     }
 
 Installs and connects the applications to the database using PostgreSQL Authentication
@@ -90,6 +91,8 @@ $authenticationSettings = @{
     AllowRegistration = $false
 }
 
+$encryptionKey = "" # Base 64 and must be 32 characters for AES-256 encryption. This value should be kept secret and secure. This will encrypt values in db.
+
 $packageSource = Split-Path $PSScriptRoot -Parent
 $adminApiSource = "$packageSource/AdminApi"
 
@@ -101,6 +104,7 @@ $p = @{
     PackageSource = $adminApiSource
     AuthenticationSettings = $authenticationSettings
     StandardVersion = '5.2.0'
+    EncryptionKey = $encryptionKey
 }
 
 if ([string]::IsNullOrWhiteSpace($p.AuthenticationSettings.Authority) -or [string]::IsNullOrWhiteSpace($p.AuthenticationSettings.IssuerUrl) -or [string]::IsNullOrWhiteSpace($p.AuthenticationSettings.SigningKey) -or $p.AuthenticationSettings.AllowRegistration -isnot [bool]) {
