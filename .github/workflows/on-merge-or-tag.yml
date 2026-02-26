@@ -59,7 +59,7 @@ jobs:
 
           $body = @{
             tag_name = "$tag"
-            target_commitish = "main"
+            target_commitish = "${{ github.ref_name }}"
             name = $tag
             body = ""
             draft = $false
