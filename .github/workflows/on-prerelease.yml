@@ -43,15 +43,28 @@ jobs:
         id: versions
         run: |
           $apiPrefix = "v"
+          $tagName = "${{ github.ref_name }}"
 
-          # Install the MinVer CLI tool
-          &dotnet tool install --global minver-cli
+          # Determine if this is a manual tag (v2.3.1) or auto-generated (Pre-Release-v2.3.2-alpha.0.X)
+          if ($tagName -match '^Pre-Release-v')
+          {
+            # Auto-generated pre-release: strip "Pre-Release-" prefix
+            $apiVersion = $tagName -replace '^Pre-Release-', ''
+            "Using auto-generated version: $apiVersion" | Write-Output
+          }
+          elseif ($tagName -match '^v\d+\.\d+\.\d+')
+          {
+            # Manual clean tag: use exact version
+            $apiVersion = $tagName
+            "Using manual tag version: $apiVersion" | Write-Output
+          }
+          else
+          {
+            # Fallback to get-version.ps1 (shouldn't normally happen)
+            $apiVersion = & ./eng/get-version.ps1
+            "Using fallback version from get-version.ps1: $apiVersion" | Write-Output
+          }
 
-          # $apiVersion = $(minver -t $apiPrefix)
-          # Write-Host "Using version: $apiVersion"
-          # Write-Host "Using semver: $($apiVersion -Replace $apiPrefix)"
-          
-          $apiVersion = & ./eng/getversion.ps1
           # Full release name
           "admin-api=$apiVersion" >> $env:GITHUB_OUTPUT
 
@@ -304,7 +317,6 @@ jobs:
            }
 
   docker-publish:
-    if: false
     name: Publish to Docker Hub
     runs-on: ubuntu-latest
     needs:
@@ -326,7 +338,7 @@ jobs:
           else
              PACKAGEVERSION=${REF}
           fi
-
+          echo "Determined package version: $PACKAGEVERSION"
           if [[ $PACKAGEVERSION =~ "pre" ]]
           then
             # Pre-releases get the tag "pre"
