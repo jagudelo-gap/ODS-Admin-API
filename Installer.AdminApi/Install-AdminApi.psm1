@@ -13,7 +13,7 @@ function Set-TlsVersion {
 }
 
 $appCommonDirectory = "$PSScriptRoot/AppCommon"
-$RequiredDotNetHostingBundleVersion = "8.0.21"
+$RequiredDotNetHostingBundleVersion = "8.0.24"
 
 Import-Module -Force "$appCommonDirectory/Environment/Prerequisites.psm1" -Scope Global
 Set-TlsVersion
@@ -368,6 +368,19 @@ function Install-EdFiOdsAdminApi {
     {
         Write-Warning "Please make sure required tenant specific Admin, Security databases are already available on the data server."
     }
+
+    if($IsMultiTenant.IsPresent -and $AdminApiMode -eq 'v1')
+    {
+        Write-Error "Admin API v1 mode does not support MultiTenant configuration."
+        exit
+    }
+
+    if($AdminApiMode -eq 'v1' -and $StandardVersion -ne '4.0.0')
+    {
+        Write-Error "Admin API v1 mode only supports StandardVersion 4.0.0."
+        exit
+    }
+
 
     $elapsed = Use-StopWatch {
         $result += Invoke-InstallationPreCheck -Config $Config
