@@ -46,6 +46,7 @@ jobs:
 
       - name: Get Docker logs (mssql)
         if: steps.combo-mssql.outcome == 'failure'
+        continue-on-error: true
         run: |
           mkdir -p docker-logs/mssql
           docker cp adminapi:/app/Ed-Fi-ODS-AdminAPI-Log.txt docker-logs/mssql/adminapi.log
@@ -54,6 +55,7 @@ jobs:
 
       - name: Tear down mssql combo
         if: always()
+        continue-on-error: true
         run: |
           docker compose \
             -f 'Docker/V1/Compose/mssql/compose-build-dev.yml' \
@@ -68,6 +70,7 @@ jobs:
 
       - name: Get Docker logs (pgsql)
         if: steps.combo-pgsql.outcome == 'failure'
+        continue-on-error: true
         run: |
           mkdir -p docker-logs/pgsql
           docker cp adminapi:/app/Ed-Fi-ODS-AdminAPI-Log.txt docker-logs/pgsql/adminapi.log
@@ -76,6 +79,7 @@ jobs:
 
       - name: Tear down pgsql combo
         if: always()
+        continue-on-error: true
         run: |
           docker compose \
             -f 'Docker/V1/Compose/pgsql/compose-build-dev.yml' \
@@ -91,7 +95,7 @@ jobs:
           fi
 
       - name: Upload Docker logs
-        if: steps.combo-mssql.outcome == 'failure' || steps.combo-pgsql.outcome == 'failure'
+        if: always() && (steps.combo-mssql.outcome == 'failure' || steps.combo-pgsql.outcome == 'failure')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docker-logs
