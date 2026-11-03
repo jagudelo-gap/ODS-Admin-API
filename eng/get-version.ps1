@@ -7,7 +7,7 @@ $version = minver -t $apiPrefix
 $apiVersion = "$apiPrefix$version"
 return $apiVersion
 
-# Provisional workaround for branches that do not have the latest tags
+#  Provisional workaround for branches that do not have the latest tags
 # Check if we have a v2.x tag anywhere in the repo
 # $latestV2Tag = git tag -l "v2.*" --sort=-v:refname | Select-Object -First 1
           
