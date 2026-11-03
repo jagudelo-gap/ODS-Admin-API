@@ -40,13 +40,17 @@
 
 .PARAMETER UseGlobalBru
     When set, invokes the globally installed 'bru' CLI instead of npx.
-    Useful if npx has local cache issues. Requires: npm install -g @usebruno/cli
+    Useful if npm ci has local cache issues. Requires: npm install -g @usebruno/cli@4.3.0 (the version pinned in eng/bruno/package.json)
 
 .PARAMETER BrunoFilter
     One or more sub-paths inside the Bruno collection to run.
     V1 default: "v1/Vendors","v1/OdsInstances","v1/ClaimSets","v1/Application"
     V2 default: "v2/"
     V3 default: "v3/"
+
+.PARAMETER ReportSuffix
+    When set, copies results.html/report.xml to results-<suffix>.html and
+    report-<suffix>.xml after the run, so sequential invocations keep every report.
 
 .EXAMPLE
     # Run V3 multi-tenant pgsql (same as CI)
@@ -78,7 +82,9 @@ param(
     [switch]$SkipDockerBuild,
     [switch]$TearDown,
     [switch]$UseGlobalBru,
-    [string[]]$BrunoFilter = @()
+    [string[]]$BrunoFilter = @(),
+
+    [string]$ReportSuffix = ""
 )
 
 Set-StrictMode -Version Latest
@@ -102,6 +108,7 @@ $brunoRecursive  = $true
 $composeFile     = $null
 $envFile         = $null
 $brunoDir        = $null
+$brunoToolsDir   = Join-Path $PSScriptRoot "bruno"
 $projectsToCopy  = @()
 
 switch ($ApiVersion) {
@@ -387,13 +394,33 @@ if ($brunoRecursive) {
 
 Push-Location $brunoDir
 try {
+    $reportsToClear = @(
+        (Join-Path $brunoDir "results.html"),
+        (Join-Path $brunoDir "report.xml")
+    )
+    if ($ReportSuffix) {
+        $reportsToClear += @(
+            (Join-Path $brunoDir "results-$ReportSuffix.html"),
+            (Join-Path $brunoDir "report-$ReportSuffix.xml")
+        )
+    }
+    foreach ($reportPath in $reportsToClear) {
+        if (Test-Path -LiteralPath $reportPath) {
+            Remove-Item -LiteralPath $reportPath -Force
+        }
+    }
+
     if ($UseGlobalBru) {
         & bru @runArgs
     } else {
         # Disable strict mode temporarily — npx.ps1 references $MyInvocation.Statement
         # which is not available under Set-StrictMode -Version Latest
         Set-StrictMode -Off
-        npx --yes @usebruno/cli@latest @runArgs
+        # Bruno CLI is pinned (with integrity hashes) in eng/bruno/package-lock.json
+        npm ci --prefix $brunoToolsDir --ignore-scripts --no-audit --no-fund
+        if ($LASTEXITCODE -ne 0) { throw "npm ci failed (exit $LASTEXITCODE)" }
+        $env:PATH = (Join-Path $brunoToolsDir "node_modules" ".bin") + [IO.Path]::PathSeparator + $env:PATH
+        & bru @runArgs
         Set-StrictMode -Version Latest
     }
     $brunoExitCode = $LASTEXITCODE
@@ -401,13 +428,24 @@ try {
     Pop-Location
     $env:NODE_TLS_REJECT_UNAUTHORIZED = $null
 
+    if ($ReportSuffix) {
+        $htmlSrc = Join-Path $brunoDir "results.html"
+        $xmlSrc  = Join-Path $brunoDir "report.xml"
+        if (Test-Path $htmlSrc) {
+            Copy-Item -Path $htmlSrc -Destination (Join-Path $brunoDir "results-$ReportSuffix.html") -Force
+        }
+        if (Test-Path $xmlSrc) {
+            Copy-Item -Path $xmlSrc -Destination (Join-Path $brunoDir "report-$ReportSuffix.xml") -Force
+        }
+    }
+
     # ---------------------------------------------------------------------------
     # 7. Optional tear-down — runs whether tests passed or failed
     # ---------------------------------------------------------------------------
     if ($TearDown) {
         Write-Host ""
         Write-Host "🧹 Tearing down containers..." -ForegroundColor Yellow
-        docker compose -f $composeFile --env-file $envFile down -v
+        docker compose -f $composeFile --env-file $envFile down -v --remove-orphans --rmi local
         if ($LASTEXITCODE -ne 0) {
             Write-Host "⚠️  docker compose down exited with $LASTEXITCODE" -ForegroundColor Yellow
         } else {

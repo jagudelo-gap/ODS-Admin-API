@@ -12,6 +12,7 @@ using EdFi.Ods.AdminApi.Common.Constants;
 using EdFi.Ods.AdminApi.Common.Infrastructure;
 using EdFi.Ods.AdminApi.Common.Infrastructure.Audit;
 using EdFi.Ods.AdminApi.Common.Infrastructure.Context;
+using EdFi.Ods.AdminApi.Common.Infrastructure.Database;
 using EdFi.Ods.AdminApi.Common.Infrastructure.Documentation;
 using EdFi.Ods.AdminApi.Common.Infrastructure.Extensions;
 using EdFi.Ods.AdminApi.Common.Infrastructure.Helpers;
@@ -156,8 +157,18 @@ public static class WebApplicationBuilderExtensions
             opt.OperationFilter<TokenEndpointBodyDescriptionFilter>();
             opt.OperationFilter<TagByResourceUrlFilter>();
             opt.OperationFilter<LocationHeaderOperationFilter>();
+            opt.OperationFilter<ResponseExampleOperationFilter>();
             opt.OperationFilter<AnonymousOperationSecurityFilter>();
-            opt.OperationFilter<ProblemDetailsResponseOperationFilter>();
+            // RFC 7807 problem details are V3 only; V2 keeps its legacy error bodies.
+            if (adminApiMode == AdminApiMode.V3)
+            {
+                opt.OperationFilter<ProblemDetailsResponseOperationFilter>();
+            }
+            else if (adminApiMode == AdminApiMode.V2)
+            {
+                opt.OperationFilter<V2ErrorResponseOperationFilter>();
+            }
+
             opt.AddSecurityDefinition(
                 "oauth",
                 new OpenApiSecurityScheme
@@ -200,6 +211,7 @@ public static class WebApplicationBuilderExtensions
             }
 
             opt.DocumentFilter<ListExplicitSchemaDocumentFilter>();
+            opt.DocumentFilter<RemoveDocumentTagsFilter>();
             opt.SchemaFilter<SwaggerOptionalSchemaFilter>();
             opt.SchemaFilter<SwaggerSchemaRemoveRequiredFilter>();
             opt.SchemaFilter<SwaggerExcludeSchemaFilter>();
@@ -417,7 +429,7 @@ public static class WebApplicationBuilderExtensions
                         )
                     );
 
-                    webApplicationBuilder.Services.AddScoped<IUsersContext>(sp => new PostgresUsersContext(
+                    webApplicationBuilder.Services.AddScoped<IUsersContext>(sp => new AdminApiPostgresUsersContext(
                         AdminDbContextOptions(sp, DatabaseEngineEnum.PostgreSql)
                     ));
                 }
@@ -449,7 +461,7 @@ public static class WebApplicationBuilderExtensions
 
                     webApplicationBuilder.Services.AddScoped<IUsersContext>(
                         (sp) =>
-                            new SqlServerUsersContext(AdminDbContextOptions(sp, DatabaseEngineEnum.SqlServer))
+                            new AdminApiSqlServerUsersContext(AdminDbContextOptions(sp, DatabaseEngineEnum.SqlServer))
                     );
                 }
                 else
@@ -486,7 +498,7 @@ public static class WebApplicationBuilderExtensions
                         )
                     );
 
-                    webApplicationBuilder.Services.AddScoped<IUsersContext>(sp => new PostgresUsersContext(
+                    webApplicationBuilder.Services.AddScoped<IUsersContext>(sp => new AdminApiPostgresUsersContext(
                         AdminDbContextOptions(sp, DatabaseEngineEnum.PostgreSql)
                     ));
                 }
@@ -518,7 +530,7 @@ public static class WebApplicationBuilderExtensions
 
                     webApplicationBuilder.Services.AddScoped<IUsersContext>(
                         (sp) =>
-                            new SqlServerUsersContext(AdminDbContextOptions(sp, DatabaseEngineEnum.SqlServer))
+                            new AdminApiSqlServerUsersContext(AdminDbContextOptions(sp, DatabaseEngineEnum.SqlServer))
                     );
                 }
                 else
